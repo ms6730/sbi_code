@@ -61,7 +61,7 @@ class ScorePosterior(NeuralPosterior):
         potential_fn, theta_transform = score_estimator_based_potential(
             score_estimator=score_estimator,
             prior=prior,
-            x_0=None
+            x_o=None
         )
 
 

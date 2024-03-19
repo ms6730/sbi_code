@@ -340,7 +340,9 @@ class NSPE(NeuralInference):
                     calibration_kernel,
                     force_first_round_loss=force_first_round_loss,
                 )
+                
                 train_loss = torch.mean(train_losses)
+
                 train_loss_sum += train_losses.sum().item()
 
                 train_loss.backward()
@@ -393,7 +395,7 @@ class NSPE(NeuralInference):
 
         # Update summary.
         self._summary["epochs_trained"].append(self.epoch)
-        self._summary["best_validation_loss"].append(self._best_val_loss)
+        self._summary["best_validation_loss"].append(self._val_loss)
 
         # Update tensorboard and summary dict.
         self._summarize(round_=self._round)
@@ -407,6 +409,9 @@ class NSPE(NeuralInference):
         self._neural_net.zero_grad(set_to_none=True)
 
         return deepcopy(self._neural_net)
+    
+    def _converged(self, epoch: int, stop_after_epochs: int) -> bool:
+        return epoch > stop_after_epochs
 
     def build_posterior(
         self,

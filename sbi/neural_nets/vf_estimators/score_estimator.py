@@ -125,19 +125,19 @@ class VPScoreEstimator(ScoreEstimator):
             -0.5 * times**2.0 * (self.beta_max - self.beta_min)
             - times * self.beta_min
         )
-        return  std.unsqueeze(-1)
+        return  torch.sqrt(std.unsqueeze(-1))
 
     def _beta_schedule(self, times):
         return self.beta_min + (self.beta_max - self.beta_min) * times
 
     def drift_fn(self, input, t):
-        return -0.5 * self._beta_schedule(t) * input
+        return -0.5 * self._beta_schedule(t).unsqueeze(-1) * input
 
     def diffusion_fn(self, t):
-        return sqrt(
+        g = torch.sqrt(
             self._beta_schedule(t)
-            * (-exp(-2 * self.beta_min * t - (self.beta_max - self.beta_min) * t**2))
         )
+        return g.unsqueeze(-1)
 
 
 class subVPScoreEstimator(ScoreEstimator):

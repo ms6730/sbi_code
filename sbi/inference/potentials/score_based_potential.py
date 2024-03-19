@@ -19,13 +19,13 @@ def score_estimator_based_potential(
     score_estimator: ScoreEstimator,
     prior: Distribution,
     x_o: Optional[Tensor],
-    diffusion_time: float,
+    diffusion_length: Optional[int] = None,
     enable_transform: bool = True,
 ) -> Tuple[Callable, TorchTransform]:
     device = str(next(score_estimator.parameters()).device)
 
     potential_fn = ScoreBasedPotential(
-        score_estimator, prior, diffusion_time, x_o, device=device
+        score_estimator, prior, x_o, diffusion_length, device=device
     )
 
     # TODO Disabling transform for now, need to think how this affects the score

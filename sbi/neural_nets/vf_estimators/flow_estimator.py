@@ -6,8 +6,8 @@ from torch import nn
 from sbi.neural_nets.vf_estimators.base import VectorFieldEstimator
 from typing import Callable, Optional
 
-class FlowMachtingEstimator(VectorFieldEstimator):
-    """Flow Matching is an alternative to score matching that instead aim to learn a
+class FlowMatchingEstimator(VectorFieldEstimator):
+    r"""Flow Matching is an alternative to score matching that instead aim to learn a
     probability flow that maps a source distribution to a target distribution. Although
     conceptually similar to score matching, it does target a different vector field and 
     has different loss functions.
@@ -51,7 +51,7 @@ class FlowMachtingEstimator(VectorFieldEstimator):
         super().__init__(net, condition_shape)
         self.weight_fn = weight_fn
         self.source_distribution = source_distribution
-        self._check_mean_and_std_fn()
+
         
     def mean_fn(self, xs_source: Tensor, xs_target: Tensor, times: Tensor):
         r"""Mean function of the flow matching vector field, specifying the mean
@@ -127,33 +127,13 @@ class FlowMachtingEstimator(VectorFieldEstimator):
             s_t = self.std_fn(xs_source, xs_target, times)
             grad = torch.autograd.grad(s_t, times, grad_outputs=torch.ones_like(s_t), create_graph=True)[0]
         return grad
-    
-    def _check_mean_and_std_fn(self):
-        x0 = self.source_distribution.sample((1,))
-        x1 = self.source_distribution.sample((1,))
-        t0 = torch.tensor([0.])
-        t1 = torch.tensor([1.])
-        
-        m0 = self.mean_fn(x0, x1, t0)
-        m1 = self.mean_fn(x0, x1, t1)
-        s0 = self.std_fn(x0, x1, t0)
-        s1 = self.std_fn(x0, x1, t1)
-        
-        assert torch.allclose(m0, x0), f"Mean function does not satisfy boundary condition m(x0,x1,0)=x0."
-        assert torch.allclose(m1, x1), f"Mean function does not satisfy boundary condition m(x0,x1,1)=x1."
-        if torch.any(s0 > 0.1):
-            warnings.warn("Std function boundary std(x0,x1,0) > 0.1, but should be close to 0 ...")
-        if torch.any(s1 > 0.1):
-            warnings.warn("Std function boundary std(x0,x1,1) > 0.1, but should be close to 0 ...")
-        
-        
-
 
     def forward(self, input: Tensor, condition: Tensor, time: Tensor):
         return self.net(input, condition, time)
 
 
     def loss(self, input: Tensor, condition: Tensor) -> Tensor:
+        
         times = torch.rand((input.shape[0],) + (1,)*(len(input.shape)-1))
         eps = torch.randn_like(input)
         xs_target = input
@@ -170,4 +150,24 @@ class FlowMachtingEstimator(VectorFieldEstimator):
         loss = torch.sum(self.weight_fn(times)*(u_t - v_t).pow(2), dim=-1)
 
         return loss
+    
+class OTFlowMatchingEstimator(FlowMatchingEstimator):
+    """_summary_
+
+    Args:
+        FlowMatchingEstimator (_type_): _description_
+    """
+    
+    def __init__(self, net: nn.Module, condition_shape: torch.Size, sigma_min:float=1e-3):
+        super().__init__(net, condition_shape)
+        self.sigma_min = sigma_min
+
+    def mean_fn(self, xs_source: Tensor, xs_target: Tensor, times: Tensor):
+        return  times*xs_target
+    
+    def std_fn(self, xs_source: Tensor, xs_target: Tensor, times: Tensor):
+        return  (1 - (1-self.sigma_min)*times)
+    
+    
+    
     

@@ -112,19 +112,21 @@ class VPScoreEstimator(ScoreEstimator):
         super().__init__(net, condition_shape, weight_fn=weight_fn)
 
     def mean_fn(self, x0, times):
-        return (
-            torch.exp(
+        a = torch.exp(
                 -0.25 * times**2.0 * (self.beta_max - self.beta_min)
                 - 0.5 * times * self.beta_min
             )
-            * x0
-        )
+            
+        mean = a.unsqueeze(-1) * x0
+        return mean
+        
 
     def std_fn(self, times):
-        return 1.0 - torch.exp(
+        std =  1.0 - torch.exp(
             -0.5 * times**2.0 * (self.beta_max - self.beta_min)
             - times * self.beta_min
         )
+        return  std.unsqueeze(-1)
 
     def _beta_schedule(self, times):
         return self.beta_min + (self.beta_max - self.beta_min) * times
@@ -155,22 +157,24 @@ class subVPScoreEstimator(ScoreEstimator):
         super().__init__(net, condition_shape, weight_fn=weight_fn)
 
     def mean_fn(self, x0, times):
-        return (
-            torch.exp(
+        a = torch.exp(
                 -0.25 * times**2.0 * (self.beta_max - self.beta_min)
                 - 0.5 * times * self.beta_min
-            )
-            * x0
         )
+            
+            
+        return a.unsqueeze(-1) * x0
 
     def std_fn(self, times):
-        return (
+        std =  (
             1.0
             - torch.exp(
                 -0.5 * times**2.0 * (self.beta_max - self.beta_min)
                 - times * self.beta_min
             )
         )**2.0
+        
+        return std.unsqueeze(-1)
 
     def _beta_schedule(self, times):
         return self.beta_min + (self.beta_max - self.beta_min) * times

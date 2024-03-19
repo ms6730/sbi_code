@@ -32,6 +32,9 @@ class ScoreEstimator(VectorFieldEstimator):
 
         # Set lambdas (variance weights) function
         self._set_weight_fn(weight_fn)
+        
+        # Min time for diffusion (0 can be numerically unstable)
+        self.T_min = 1e-3
 
         self.mean = (
             0.0  # this still needs to be computed (mean of the noise distribution)
@@ -59,7 +62,7 @@ class ScoreEstimator(VectorFieldEstimator):
     def loss(self, input: Tensor, condition: Tensor) -> Tensor:
         """Denoising score matching loss (Song et al., ICLR 2021)."""
         # Sample diffusion times.
-        times = torch.rand((input.shape[0],))
+        times = torch.clip(torch.rand((input.shape[0],)), self.T_min, 1.0)
 
         # Sample noise
         eps = torch.randn_like(input)
@@ -78,8 +81,8 @@ class ScoreEstimator(VectorFieldEstimator):
         score_pred = self.forward(input_noised, condition, times)
 
         # Compute weights over time.
-        weights = self.weight_fn(std)
-        
+        weights = self.weight_fn(times)
+
         # Compute MSE loss between network output and true score.
         loss = torch.sum((score_target - score_pred).pow(2.0), axis=-1)
         loss = torch.mean(weights * loss)
@@ -89,10 +92,12 @@ class ScoreEstimator(VectorFieldEstimator):
     def _set_weight_fn(self, weight_fn):
         """Get the weight function."""
         if weight_fn == "identity":
-            self.weight_fn = lambda sigma: 1
+            self.weight_fn = lambda t: 1
+        elif weight_fn == "max_likelihood":
+            self.weight_fn = lambda t: self.diffusion_fn(t)**2
         elif weight_fn == "variance":
             # From Song & Ermon, NeurIPS 2019.
-            self.weight_fn = lambda sigma: sigma.pow(2.0)
+            self.weight_fn = lambda t: self.std_fn(t).pow(2.0)
         elif callable(weight_fn):
             self.weight_fn = weight_fn
         else:

@@ -79,7 +79,7 @@ class ScoreEstimator(VectorFieldEstimator):
 
         # Compute weights over time.
         weights = self.weight_fn(std)
-
+        
         # Compute MSE loss between network output and true score.
         loss = torch.sum((score_target - score_pred).pow(2.0), axis=-1)
         loss = torch.mean(weights * loss)
@@ -106,7 +106,7 @@ class VPScoreEstimator(ScoreEstimator):
         self,
         net: nn.Module,
         condition_shape: torch.Size,
-        weight_fn: Union[str, Callable] = "variance",
+        weight_fn: Union[str, Callable] = "identity",
         beta_min: float = 0.1,
         beta_max: float = 20.0,
     ) -> None:
@@ -149,7 +149,7 @@ class subVPScoreEstimator(ScoreEstimator):
         self,
         net: nn.Module,
         condition_shape: torch.Size,
-        weight_fn: Union[str, Callable] = "variance",
+        weight_fn: Union[str, Callable] = "identity",
         beta_min: float = 0.1,
         beta_max: float = 20.0,
     ) -> None:
@@ -192,7 +192,7 @@ class VEScoreEstimator(ScoreEstimator):
         self,
         net: nn.Module,
         condition_shape: torch.Size,
-        weight_fn: Union[str, Callable] = "variance",
+        weight_fn: Union[str, Callable] = "identity",
         sigma_min: float = 0.01,
         sigma_max: float = 10.0,
     ) -> None:
@@ -204,7 +204,8 @@ class VEScoreEstimator(ScoreEstimator):
         return x0
 
     def std_fn(self, times):
-        return self.sigma_min**2.0 * (self.sigma_max / self.sigma_min) ** (2.0 * times)
+        std = self.sigma_min**2.0 * (self.sigma_max / self.sigma_min) ** (2.0 * times)
+        return std.unsqueeze(-1)
 
     def _sigma_schedule(self, times):
         return self.sigma_min * (self.sigma_max / self.sigma_min) ** times

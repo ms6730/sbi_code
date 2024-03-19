@@ -1,12 +1,13 @@
 # This file is part of sbi, a toolkit for simulation-based inference. sbi is licensed
 # under the Affero General Public License v3, see <https://www.gnu.org/licenses/>.
 from typing import Optional, Union
-from functools import identity
+
 
 import torch
 import torch.nn as nn
 from torch import Tensor, log
 from torch.distributions import Distribution
+from torch.distributions import identity_transform
 
 from sbi.inference.posteriors.base_posterior import NeuralPosterior
 from sbi.inference.potentials.posterior_based_potential import (
@@ -61,7 +62,7 @@ class ScorePosterior(NeuralPosterior):
         # obtaining the MAP.
         check_prior(prior)
         potential_fn = score_estimator  # ??
-        theta_transform = identity  # later to be modified for MCMC
+        theta_transform = identity_transform  # later to be modified for MCMC
 
         super().__init__(
             potential_fn=potential_fn,

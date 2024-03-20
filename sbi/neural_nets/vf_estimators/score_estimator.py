@@ -47,7 +47,7 @@ class ScoreEstimator(VectorFieldEstimator):
 
     def forward(self, input: Tensor, condition: Tensor, times: Tensor) -> Tensor:
         # Predict noise and divide by standard deviation to mirror target score.
-        eps_pred = self.net(input, condition, times)        
+        eps_pred = self.net([input, condition, times])
         std = self.std_fn(times)
         return eps_pred / std
     

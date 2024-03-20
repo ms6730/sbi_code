@@ -25,8 +25,8 @@ class StandardizeInputs(nn.Module):
 
     def forward(self, inputs: list) -> Tensor:
         assert (
-            isinstance(inputs, list) and len(inputs) == 2
-        ), """Inputs to regression net must be a list containing raw theta, x, and 1d time ."""
+            isinstance(inputs, list) and len(inputs) == 3
+        ), """Inputs to regression net must be a list containing raw theta, x, and 1d time."""
         out = torch.cat(
             [
                 self.embedding_net_x(inputs[0]),
@@ -107,6 +107,7 @@ def build_mlp_regression(
             sample is, for example, a time series or an image.
         z_score_y: Whether to z-score ys passing into the network, same options as
             z_score_x.
+        t_embedding_dim: Dimensionality of the time embedding.
         hidden_features: Number of hidden features.
         embedding_net_x: Optional embedding network for x.
         embedding_net_y: Optional embedding network for y.
@@ -119,17 +120,18 @@ def build_mlp_regression(
     check_embedding_net_device(embedding_net=embedding_net_y, datum=batch_y)
 
     # Infer the output dimensionalities of the embedding_net by making a forward pass.
+    x_dim = batch_x.shape[1]
     x_numel = embedding_net_x(batch_x[:1]).numel()
-    y_numel = embedding_net_y(batch_y[:1]).numel()
+    y_numel = embedding_net_y(batch_y[:1]).numel()    
 
     neural_net = nn.Sequential(
-        nn.Linear(x_numel + y_numel, hidden_features),
+        nn.Linear(x_numel + y_numel + t_embedding_dim, hidden_features),
         nn.BatchNorm1d(hidden_features),
         nn.ReLU(),
         nn.Linear(hidden_features, hidden_features),
         nn.BatchNorm1d(hidden_features),
         nn.ReLU(),
-        nn.Linear(hidden_features, 1),
+        nn.Linear(hidden_features, x_dim),
     )
 
     input_layer = build_input_layer(

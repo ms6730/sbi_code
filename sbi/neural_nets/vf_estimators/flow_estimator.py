@@ -129,7 +129,7 @@ class FlowMatchingEstimator(VectorFieldEstimator):
         return grad
 
     def forward(self, input: Tensor, condition: Tensor, time: Tensor):
-        return self.net(input, condition, time)
+        return self.net([input, condition, time])
 
 
     def loss(self, input: Tensor, condition: Tensor) -> Tensor:

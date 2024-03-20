@@ -10,6 +10,7 @@ from torch.distributions import Distribution
 from sbi.inference.posteriors.base_posterior import NeuralPosterior
 from sbi.inference.potentials.score_based_potential import score_estimator_based_potential
 from sbi.samplers.rejection.rejection import accept_reject_sample
+from sbi.samplers.score.score import score_based_sampler
 from sbi.types import Shape
 from sbi.utils import check_prior, within_support
 from sbi.utils.torchutils import ensure_theta_batched
@@ -43,7 +44,7 @@ class ScorePosterior(NeuralPosterior):
         """
         Args:
             prior: Prior distribution with `.log_prob()` and `.sample()`.
-            posterior_estimator: The trained neural posterior.
+            score_estimator: The trained neural score estimator.
             max_sampling_batch_size: Batchsize of samples being drawn from
                 the proposal at every iteration.
             device: Training device, e.g., "cpu", "cuda" or "cuda:0". If None,
@@ -54,9 +55,7 @@ class ScorePosterior(NeuralPosterior):
                 during MAP optimization. When False, an identity transform will be
                 returned for `theta_transform`.
         """
-        # Because `DirectPosterior` does not take the `potential_fn` as input, it
-        # builds it itself. The `potential_fn` and `theta_transform` are used only for
-        # obtaining the MAP.
+       
         check_prior(prior)
         potential_fn, theta_transform = score_estimator_based_potential(
             score_estimator=score_estimator,
@@ -79,7 +78,6 @@ class ScorePosterior(NeuralPosterior):
 
 
         self.max_sampling_batch_size = max_sampling_batch_size
-        self._leakage_density_correction_factor = None
 
         self._purpose = """It samples from the diffusion model given the score_estimator and rejects samples that
             lie outside of the prior bounds."""
@@ -106,7 +104,10 @@ class ScorePosterior(NeuralPosterior):
 
         num_samples = torch.Size(sample_shape).numel()
         condition_shape = self.score_estimator._condition_shape
+
         x = self._x_else_default_x(x)
+        self.potential_fn.set_x(x)
+        
 
         try:
             x = x.reshape(*condition_shape)
@@ -130,18 +131,32 @@ class ScorePosterior(NeuralPosterior):
                 f"`.build_posterior(sample_with={sample_with}).`"
             )
 
-        proposal = ScoreDistribution(score_estimator=self.score_estimator, condition = x, sample_with = 'sde', event_shape=self.prior.event_shape)
+        #proposal = ScoreDistribution(score_estimator=self.score_estimator, condition = x, sample_with = 'sde', event_shape=self.prior.event_shape)
         
-        
-        samples = accept_reject_sample(
-            proposal=proposal,  # type Union[nn.module, Distribution, NeuralPosterior]
-            accept_reject_fn=lambda theta: within_support(self.prior, theta),
+        num_samples = torch.Size(sample_shape).numel()
+        theta_dim = self.prior.event_shape.numel()
+        proposal = torch.distributions.Normal(torch.zeros(theta_dim), torch.ones(theta_dim))
+        ts = torch.linspace(1.,1e-3, 1000)
+        samples = score_based_sampler(
+            score_based_potential=self.potential_fn,
+            proposal=proposal,
+            drift = self.score_estimator.drift_fn,
+            diffusion = self.score_estimator.diffusion_fn,
+            ts = ts,
+            dim_theta = theta_dim,
             num_samples=num_samples,
-            show_progress_bars=show_progress_bars,
-            max_sampling_batch_size=max_sampling_batch_size,
-            proposal_sampling_kwargs={"condition": x},
-            alternative_method="build_posterior(..., sample_with='mcmc')",
-        )[0]
+        )
+        
+        
+        # samples = accept_reject_sample(
+        #     proposal=proposal,  # type Union[nn.module, Distribution, NeuralPosterior]
+        #     accept_reject_fn=lambda theta: within_support(self.prior, theta),
+        #     num_samples=num_samples,
+        #     show_progress_bars=show_progress_bars,
+        #     max_sampling_batch_size=max_sampling_batch_size,
+        #     proposal_sampling_kwargs={"condition": x},
+        #     alternative_method="build_posterior(..., sample_with='mcmc')",
+        # )[0]
 
         return samples
 

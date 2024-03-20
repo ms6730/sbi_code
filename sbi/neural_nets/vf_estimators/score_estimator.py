@@ -50,9 +50,20 @@ class ScoreEstimator(VectorFieldEstimator):
 
     def forward(self, input: Tensor, condition: Tensor, times: Tensor) -> Tensor:
         # Predict noise and divide by standard deviation to mirror target score.
+        #print(input.shape, condition.shape, times.shape)
+        if times.shape.numel() == 1:
+            times = torch.repeat_interleave(times[None], input.shape[0], dim=0)
+            times = times.reshape((input.shape[0],))
+        input_shape = input.shape
+        input = input.reshape((-1, input.shape[-1]))
+        condition = condition.reshape(-1, condition.shape[-1])
+        condition = torch.repeat_interleave(condition, input.shape[0]//condition.shape[0], dim=0)
+        #print(input.shape, condition.shape, times.shape)
         eps_pred = self.net([input, condition, times])
         std = self.std_fn(times)
-        return eps_pred / std
+        eps_pred = eps_pred
+        score =  eps_pred / std
+        return score.reshape(input_shape)
     
     def loss(self, input: Tensor, condition: Tensor) -> Tensor:
         """Denoising score matching loss (Song et al., ICLR 2021)."""

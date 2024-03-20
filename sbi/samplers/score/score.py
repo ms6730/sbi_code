@@ -2,7 +2,8 @@
 from typing import Callable, Any
 from tqdm.auto import tqdm
 import torch
-from sbi.inference.potentials import ScoreBasedPotential
+from sbi.inference.potentials.score_based_potential import ScoreBasedPotential
+from math import sqrt
 
 def score_based_sampler(
     score_based_potential: ScoreBasedPotential,
@@ -30,6 +31,7 @@ def score_based_sampler(
     sample_shape = (num_samples, batch)
     theta = proposal.sample(sample_shape)
     delta_t = (1/ts.numel())
+    delta_t_sqrt = sqrt(delta_t)
     pbar = tqdm(
         ts,
         disable=not show_progress_bars,
@@ -37,11 +39,10 @@ def score_based_sampler(
     )
 
     for t in pbar:
-        theta = theta + (drift(input=theta, t=t)
-                        - (diffusion(input=theta, t=t)) ** 2
-                        * score_based_potential(theta=theta, diffusion_time=t)) * delta_t + diffusion(input=theta, t=t) * torch.randn((sample_shape, dim_theta)) * delta_t
-
-            
+        f = drift(theta, t)
+        g = diffusion(theta, t)
+        score = score_based_potential(theta, t)
+        theta = theta - (f-g**2*score) *delta_t + g * torch.randn(sample_shape) * delta_t_sqrt
             
 
     return theta

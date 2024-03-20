@@ -109,14 +109,14 @@ class ScorePosterior(NeuralPosterior):
         self.potential_fn.set_x(x)
         
 
-        try:
-            x = x.reshape(*condition_shape)
-        except RuntimeError as err:
-            raise ValueError(
-                f"Expected a single `x` which should broadcastable to shape \
-                  {condition_shape}, but got {x.shape}. For batched eval \
-                  see issue #990"
-            ) from err
+        # try:
+        #     x = x.reshape(*condition_shape)
+        # except RuntimeError as err:
+        #     raise ValueError(
+        #         f"Expected a single `x` which should broadcastable to shape \
+        #           {condition_shape}, but got {x.shape}. For batched eval \
+        #           see issue #990"
+        #     ) from err
 
         max_sampling_batch_size = (
             self.max_sampling_batch_size

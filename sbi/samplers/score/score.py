@@ -37,12 +37,15 @@ def score_based_sampler(
         disable=not show_progress_bars,
         desc=f"Drawing {num_samples} posterior samples",
     )
+    shape = theta.shape
 
     for t in pbar:
         f = drift(theta, t)
         g = diffusion(theta, t)
         score = score_based_potential(theta, t)
-        theta = theta - (f-g**2*score) *delta_t + g * torch.randn(sample_shape) * delta_t_sqrt
-            
+
+        theta = theta - (f-g**2*score) *delta_t + g * torch.randn(sample_shape + (dim_theta,)) * delta_t_sqrt
+        
+        theta.reshape(shape)
 
     return theta

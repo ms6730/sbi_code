@@ -106,7 +106,7 @@ class ScorePosterior(NeuralPosterior):
         """
 
         num_samples = torch.Size(sample_shape).numel()
-        condition_shape = self.score_estimator.condition_shape
+        condition_shape = self.score_estimator._condition_shape
         x = self._x_else_default_x(x)
 
         try:
@@ -143,7 +143,7 @@ class ScorePosterior(NeuralPosterior):
         )[0]
 
         return samples
-'''
+
     def log_prob(
         self,
         theta: Tensor,
@@ -176,6 +176,8 @@ class ScorePosterior(NeuralPosterior):
             `(len(θ),)`-shaped log posterior probability $\log p(\theta|x)$ for θ in the
             support of the prior, -∞ (corresponding to 0 probability) outside.
         """
+
+        raise NotImplementedError
         x = self._x_else_default_x(x)
         condition_shape = self.posterior_estimator._condition_shape
         try:
@@ -214,7 +216,7 @@ class ScorePosterior(NeuralPosterior):
             )
 
             return masked_log_prob - log_factor
-
+    '''
     @torch.no_grad()
     def leakage_correction(
         self,
@@ -268,7 +270,8 @@ class ScorePosterior(NeuralPosterior):
             self._leakage_density_correction_factor = acceptance_at(self.default_x)
 
         return self._leakage_density_correction_factor  # type: ignore
-
+    '''
+    
     def map(
         self,
         x: Optional[Tensor] = None,
@@ -324,6 +327,7 @@ class ScorePosterior(NeuralPosterior):
         Returns:
             The MAP estimate.
         """
+        raise NotImplementedError
         return super().map(
             x=x,
             num_iter=num_iter,
@@ -335,4 +339,4 @@ class ScorePosterior(NeuralPosterior):
             show_progress_bars=show_progress_bars,
             force_update=force_update,
         )
-'''
+

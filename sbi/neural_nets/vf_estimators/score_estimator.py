@@ -76,7 +76,7 @@ class ScoreEstimator(VectorFieldEstimator):
         weights = self.weight_fn(times)
 
         # Compute MSE loss between network output and true score.
-        loss = torch.sum((score_target - score_pred).pow(2.0), axis=-1)
+        loss = torch.sum((score_target - score_pred)**2.0, axis=-1)
         loss = torch.mean(weights * loss)
 
         return loss
@@ -114,7 +114,7 @@ class VPScoreEstimator(ScoreEstimator):
     def mean_fn(self, x0, times):
         return (
             torch.exp(
-                -0.25 * times.pow(2.0) * (self.beta_max - self.beta_min)
+                -0.25 * times**2.0 * (self.beta_max - self.beta_min)
                 - 0.5 * times * self.beta_min
             )
             * x0
@@ -122,7 +122,7 @@ class VPScoreEstimator(ScoreEstimator):
 
     def std_fn(self, times):
         return 1.0 - torch.exp(
-            -0.5 * times.pow(2.0) * (self.beta_max - self.beta_min)
+            -0.5 * times**2.0 * (self.beta_max - self.beta_min)
             - times * self.beta_min
         )
 
@@ -157,7 +157,7 @@ class subVPScoreEstimator(ScoreEstimator):
     def mean_fn(self, x0, times):
         return (
             torch.exp(
-                -0.25 * times.pow(2.0) * (self.beta_max - self.beta_min)
+                -0.25 * times**2.0 * (self.beta_max - self.beta_min)
                 - 0.5 * times * self.beta_min
             )
             * x0
@@ -167,10 +167,10 @@ class subVPScoreEstimator(ScoreEstimator):
         return (
             1.0
             - torch.exp(
-                -0.5 * times.pow(2.0) * (self.beta_max - self.beta_min)
+                -0.5 * times**2.0 * (self.beta_max - self.beta_min)
                 - times * self.beta_min
             )
-        ).power(2.0)
+        )**2.0
 
     def _beta_schedule(self, times):
         return self.beta_min + (self.beta_max - self.beta_min) * times

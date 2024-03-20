@@ -23,6 +23,7 @@ from sbi.inference.posteriors.base_posterior import NeuralPosterior
 from sbi.inference.posteriors.score_posterior import ScorePosterior
 from sbi.inference.potentials.score_based_potential import score_estimator_based_potential
 from sbi.neural_nets.vf_estimators.score_estimator import ScoreEstimator
+from sbi.neural_nets.factory import posterior_score_nn
 from sbi.utils import (
     RestrictedPrior,
     check_estimator_arg,
@@ -41,10 +42,12 @@ class NSPE(NeuralInference):
         self,
         prior: Optional[Distribution] = None,
         score_estimator: Union[str, Callable] = "mlp",
+        sde_type: str = "vp",
         device: str = "cpu",
         logging_level: Union[int, str] = "WARNING",
         summary_writer: Optional[SummaryWriter] = None,
         show_progress_bars: bool = True,
+        **kwargs: Dict[str, Any],
     ):
         """Base class for Sequential Neural Posterior Estimation methods.
 
@@ -76,7 +79,7 @@ class NSPE(NeuralInference):
         # potentially for z-scoring.
         check_estimator_arg(score_estimator)
         if isinstance(score_estimator, str):
-            self._build_neural_net = utils.posterior_nn(model=score_estimator)
+            self._build_neural_net = posterior_score_nn(sde_type=sde_type, score_net_type=score_estimator, **kwargs)
         else:
             self._build_neural_net = score_estimator
 
@@ -476,7 +479,7 @@ class NSPE(NeuralInference):
         if sample_with == "ode":
             raise NotImplementedError("ODE-based sampling is not yet implemented.")
         elif sample_with == "sde":
-            posterior = ScorePosterior(score_estimator, prior)
+            posterior = ScorePosterior(score_estimator, prior, x_shape=self._x_shape)
        
         self._posterior = posterior
         # Store models at end of each round.

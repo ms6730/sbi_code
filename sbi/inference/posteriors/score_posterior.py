@@ -16,7 +16,7 @@ from sbi.utils import check_prior, within_support
 from sbi.utils.torchutils import ensure_theta_batched
 
 from sbi.neural_nets.vf_estimators.score_estimator import ScoreEstimator
-from sbi.neural_nets.vf_estimators.score_based_distribution import ScoreDistribution
+from sbi.neural_nets.vf_estimators.score_based_distribution_deprecated import ScoreDistribution
 
 
 class ScorePosterior(NeuralPosterior):
@@ -107,7 +107,7 @@ class ScorePosterior(NeuralPosterior):
         condition_shape = self.score_estimator._condition_shape
 
         x = self._x_else_default_x(x)
-        self.potential_fn.set_x(x)
+        self.potential_fn.set_x(x.unsqueeze(0))
         
 
         # try:

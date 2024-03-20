@@ -53,7 +53,7 @@ class ScoreEstimator(VectorFieldEstimator):
 
         # Predict noise and divide by standard deviation to mirror target score.
         # TODO Replace with Michaels magic shapeing function
-        print(input.shape, condition.shape, times.shape)
+        #print(input.shape, condition.shape, times.shape)
         if times.shape.numel() == 1:
             times = torch.repeat_interleave(times[None], input.shape[0], dim=0)
             times = times.reshape((input.shape[0],))
@@ -102,7 +102,7 @@ class ScoreEstimator(VectorFieldEstimator):
         if weight_fn == "identity":
             self.weight_fn = lambda t: 1
         elif weight_fn == "max_likelihood":
-            self.weight_fn = lambda t: self.diffusion_fn(t)**2
+            self.weight_fn = lambda t: self.diffusion_fn(torch.ones((1,)),t)**2
         elif weight_fn == "variance":
             # From Song & Ermon, NeurIPS 2019.
             raise NotImplementedError
@@ -119,8 +119,8 @@ class VPScoreEstimator(ScoreEstimator):
         self,
         net: nn.Module,
         condition_shape: torch.Size,
-        weight_fn: Union[str, Callable] = "identity",
-        beta_min: float = 0.1,
+        weight_fn: Union[str, Callable] = "max_likelihood",
+        beta_min: float = 0.01,
         beta_max: float = 20.0,
     ) -> None:
         self.beta_min = beta_min
@@ -166,8 +166,8 @@ class subVPScoreEstimator(ScoreEstimator):
         self,
         net: nn.Module,
         condition_shape: torch.Size,
-        weight_fn: Union[str, Callable] = "identity",
-        beta_min: float = 0.1,
+        weight_fn: Union[str, Callable] = "max_likelihood",
+        beta_min: float = 0.01,
         beta_max: float = 20.0,
     ) -> None:
         self.beta_min = beta_min
@@ -220,7 +220,7 @@ class VEScoreEstimator(ScoreEstimator):
         self,
         net: nn.Module,
         condition_shape: torch.Size,
-        weight_fn: Union[str, Callable] = "identity",
+        weight_fn: Union[str, Callable] = "max_likelihood",
         sigma_min: float = 0.01,
         sigma_max: float = 10.0,
     ) -> None:

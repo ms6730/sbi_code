@@ -182,7 +182,7 @@ def build_score_estimator(
         estimator = VPScoreEstimator
     elif sde_type == 've':
         estimator = VEScoreEstimator
-    elif sde_type == 'subv':
+    elif sde_type == 'subvp':
         estimator = subVPScoreEstimator
     else:
         raise ValueError(f"SDE type: {sde_type} not supported.")

@@ -5,6 +5,7 @@ import torch
 from sbi.inference.potentials.score_based_potential import ScoreBasedPotential
 from math import sqrt
 
+@torch.no_grad()
 def score_based_sampler(
     score_based_potential: ScoreBasedPotential,
     proposal: Any, 

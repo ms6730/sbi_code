@@ -107,7 +107,7 @@ class ScorePosterior(NeuralPosterior):
         condition_shape = self.score_estimator._condition_shape
 
         x = self._x_else_default_x(x)
-        self.potential_fn.set_x(x.unsqueeze(0))
+        self.potential_fn.set_x(x.unsqueeze(0)) # TODO Fix when new batching rules are in
         
 
         # try:
@@ -159,7 +159,7 @@ class ScorePosterior(NeuralPosterior):
         #     alternative_method="build_posterior(..., sample_with='mcmc')",
         # )[0]
 
-        return samples
+        return samples.reshape(sample_shape + self.prior.event_shape)
 
     def log_prob(
         self,

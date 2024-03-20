@@ -1,14 +1,11 @@
-# check
-
-from typing import Tuple, Union, Optional, Callable
+from math import exp, log, sqrt
+from typing import Callable, Tuple, Union
 
 import torch
 from torch import Tensor, nn
 
 from sbi.neural_nets.vf_estimators import VectorFieldEstimator
 from sbi.types import Shape
-
-from math import sqrt, log, exp
 
 
 class ScoreEstimator(VectorFieldEstimator):

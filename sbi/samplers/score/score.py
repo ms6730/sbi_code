@@ -27,11 +27,13 @@ def score_based_sampler(
 
 
     pbar = tqdm(
+        ts,
         disable=not show_progress_bars,
-        total=num_samples,
         desc=f"Drawing {num_samples} posterior samples",
     )
 
+    for t in pbar:
+        pass
             
             
 

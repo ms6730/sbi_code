@@ -6,7 +6,7 @@ from zuko.utils import odeint
 from torch import Tensor
 
 
-class SBDistribution:
+class ScoreDistribution:
     """Wrapper around ScoreEstimator to have objects with sample function"""
 
     def __init__(self, score_estimator: ScoreEstimator, noise_distribution):
@@ -14,7 +14,7 @@ class SBDistribution:
         self.score_estimator = score_estimator
         self.drift_fn = score_estimator.drift_fn
         self.diffusion_fn = score_estimator.diffusion_fn
-        self.context_shape = score_estimator.context_shape
+        self.condition_shape = score_estimator.condition_shape
         self.step_size = 1000
         self.noise_distribution = Normal(
             loc=score_estimator.mean, scale=score_estimator.stddev

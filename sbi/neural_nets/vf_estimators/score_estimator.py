@@ -16,23 +16,19 @@ class ScoreEstimator(VectorFieldEstimator):
             condition_shape: torch.Size,
             sde_type: str='VP',
             noise_minmax: Tuple[float, float]=(0.1, 20.),
-            weight_fn: Union[str, Callable]='variance',
-            embedding_net: nn.Module = nn.Identity(),
+            weight_fn: Union[str, Callable]='variance',            
             ) -> None:
         """
         Class for score estimators with variance exploding (NCSN), variance preserving (DDPM), or sub-variance preserving SDEs.
         """
-        super().__init__(net, condition_shape)
         if net is None:
             # Define a simple torch MLP network if not provided.
             nn.MLP()
-
-
-
-            
-
         elif isinstance(net, nn.Module):
             self.net = net
+        
+        super().__init__(net, condition_shape)
+        
 
         self.condition_shape = condition_shape
         # Set mean and standard deviation functions based on the type of SDE and noise bounds.
@@ -42,8 +38,9 @@ class ScoreEstimator(VectorFieldEstimator):
 
     def forward(self, input: Tensor, condition: Tensor, times: Tensor) -> Tensor:
         score = self.net(input, condition, times)
-        # TO DO: divide by std here also
-        return score
+        # Divide by standard deviation to mirror target score
+        std = self.std_fn(times)
+        return score / std
     
     def loss(self, input: Tensor, condition: Tensor) -> Tensor:
         """Denoising score matching loss (Song et al., ICLR 2021)."""
@@ -52,22 +49,19 @@ class ScoreEstimator(VectorFieldEstimator):
 
         # Sample noise
         eps = torch.randn_like(input)
-
-        # # Compute variances from noise schedule.
-        # sigma = self.noise_schedule(times)
-
+        
         # Compute mean and standard deviation.
         mean = self.mean_fn(input, times)
         std = self.std_fn(times)
 
         # Get noised input, i.e., p(xt|x0)
-        noised_input = mean + std * eps
+        input_noised = mean + std * eps
 
         # Compute true score: -(mean - noised_input) / (std**2)
         score_target = - eps/std
         
         # Predict score.
-        score_pred = self.forward(noised_input, condition, times)
+        score_pred = self.forward(input_noised, condition, times)
 
         # Compute weights over time.
         weights = self.weight_fn(std)

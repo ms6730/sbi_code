@@ -143,6 +143,11 @@ def build_mlp_regression(
     return neural_net
 
 
+# TO DO:
+# - separate the actual network architecture from the build function
+# - add build_VP, build_VE, build_subVP
+
+
 # class FC_MLP(nn.Module):
 #   """Simple fully connected neural network."""
 #   def __init__(self, input_dim, output_dim, hidden_dim=256, num_layers=2):

@@ -19,13 +19,14 @@ def score_estimator_based_potential(
     score_estimator: ScoreEstimator,
     prior: Distribution,
     x_o: Optional[Tensor],
+    x_o_shape: Optional[Tuple[int, ...]] = None,
     diffusion_length: Optional[int] = None,
     enable_transform: bool = True,
 ) -> Tuple[Callable, TorchTransform]:
     device = str(next(score_estimator.parameters()).device)
 
     potential_fn = ScoreBasedPotential(
-        score_estimator, prior, x_o, diffusion_length, device=device
+        score_estimator, prior, x_o, x_o_shape, diffusion_length, device=device
     )
 
     # TODO Disabling transform for now, need to think how this affects the score
@@ -42,6 +43,7 @@ class ScoreBasedPotential(BasePotential):
         score_estimator: ScoreEstimator,
         prior: Distribution,
         x_o: Optional[Tensor],
+        x_o_shape: Optional[Tuple[int, ...]] = None,
         diffusion_length: Optional[float] = None,
         device: str = "cpu",
     ):
@@ -58,6 +60,7 @@ class ScoreBasedPotential(BasePotential):
 
         self.score_estimator = score_estimator
         self.diffusion_length = diffusion_length
+        self.x_o_shape = x_o_shape
 
     def __call__(
         self, theta: Tensor, diffusion_time: Tensor, track_gradients: bool = True
@@ -71,11 +74,16 @@ class ScoreBasedPotential(BasePotential):
         Returns:
             The potential function.
         """
+        # theta shape (batch, (iid), event_dim)
 
-        # TODO check if x_o consists of multiple observations
-        # Is this a robust check that corresponds to the ones in NLE?
-
-        if self.x_o.shape[0] > 1:
+        # could also have a more lenient check here (just the length)
+        # this assumes that there is only one batch dimension
+        # is this assumption always valid?
+        if self.x_o.shape[1:] == self.x_o_shape:
+            score_trial_sum = self.score_estimator.forward(
+                input=theta, condition=self.x_o, times=diffusion_time
+            )
+        else:
             assert self.diffusion_length is not None
             # Diffusion length is required for Geffner bridge
             score_trial_sum = _bridge(
@@ -87,16 +95,13 @@ class ScoreBasedPotential(BasePotential):
                 diffusion_lentgh=self.diffusion_length,
                 track_gradients=track_gradients,
             )
-        else:
-            score_trial_sum = self.score_estimator.forward(
-                input=theta, condition=self.x_o, times=diffusion_time
-            )
 
         return score_trial_sum
 
 
 def _bridge(
     x: Tensor,
+    x_shape: Tuple[int, ...],
     theta: Tensor,
     estimator: ScoreEstimator,
     diffusion_time: Tensor,
@@ -110,22 +115,24 @@ def _bridge(
     experimental conditions.
     """
 
-    # TODO: this does not conform to the new condition shapes
-    # any unsqueezing should not be necessary here
-    x = torch.as_tensor(x).reshape(-1, x.shape[-1]).unsqueeze(1)
-    num_obs = x.shape[0]
     assert (
         next(estimator.parameters()).device == x.device and x.device == theta.device
     ), f"""device mismatch: estimator, x, theta: \
         {next(estimator.parameters()).device}, {x.device},
         {theta.device}."""
 
+    # Get number of observations which are left from event_shape if they exist.
+    num_obs = x.shape[-len(x_shape) - 1]
+
     # Calculate likelihood in one batch.
+    # TODO we need to figure out the axis where we sum or manually reshape to a
+    # compatible input for the score estimtor and then reshape and summing after
+    # obtaining the score.
     with torch.set_grad_enabled(track_gradients):
         score_trial_batch = estimator.forward(
             input=theta, condition=x, times=diffusion_time
         )
-        # Reshape to (-1, theta_batch_size), sum over trial-log likelihoods.
+
         score_trial_sum = score_trial_batch.sum(0)
 
     return score_trial_sum + _get_prior_contribution(
@@ -144,7 +151,7 @@ def _get_prior_contribution(
     # to obtain the posterior for multiple IID observations.
     # For now, it only implements the approach by Geffner et al.
 
-    # TODO check if this has the grad property else use torch autograd
+    # TODO Check if prior has the grad property else use torch autograd
     # For now just use autograd.
 
     log_prob_theta = prior.log_prob(theta)

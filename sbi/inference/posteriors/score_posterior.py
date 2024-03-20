@@ -130,7 +130,9 @@ class ScorePosterior(NeuralPosterior):
                 f"`.build_posterior(sample_with={sample_with}).`"
             )
 
-        proposal = ScoreDistribution(score_estimator=self.score_estimator, condition = x, sample_with = 'sde')
+        proposal = ScoreDistribution(score_estimator=self.score_estimator, condition = x, sample_with = 'sde', event_shape=self.prior.event_shape)
+        
+        
         samples = accept_reject_sample(
             proposal=proposal,  # type Union[nn.module, Distribution, NeuralPosterior]
             accept_reject_fn=lambda theta: within_support(self.prior, theta),

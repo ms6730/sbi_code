@@ -30,11 +30,6 @@ class VectorFieldEstimator(nn.Module):
         self.net = net
         self._condition_shape = condition_shape
 
-    @property
-    def embedding_net(self) -> Optional[nn.Module]:
-        r"""Return the embedding network if it exists."""
-        return None
-
     def forward(self, input: Tensor, condition: Tensor, **kwargs) -> Tensor:
         raise NotImplementedError
 

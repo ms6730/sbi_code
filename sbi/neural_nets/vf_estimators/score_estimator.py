@@ -8,7 +8,6 @@ from sbi.types import Shape
 class ScoreEstimator(VectorFieldEstimator):
     r"""Score estimator for score-based generative models (e.g., denoising diffusion).
     """
-
     def __init__(
             self, 
             net: nn.Module,
@@ -77,9 +76,8 @@ class ScoreEstimator(VectorFieldEstimator):
         else:
             raise ValueError(f"Weight function {weight_fn} not recognized.")
     
-    
-
 class VPScoreEstimator(ScoreEstimator):
+    """ Class for score estimators with variance preserving SDEs (i.e., DDPM)."""
     def __init__(
             self, 
             net: nn.Module,
@@ -87,10 +85,7 @@ class VPScoreEstimator(ScoreEstimator):
             weight_fn: Union[str, Callable]='variance',
             beta_min: float=0.1,
             beta_max: float=20.,                        
-            ) -> None:
-        """
-        Class for score estimators with variance preserving (DDPM) SDEs.
-        """
+            ) -> None:        
         self.beta_min = beta_min
         self.beta_max = beta_max        
         super().__init__(net, condition_shape, weight_fn=weight_fn)
@@ -105,6 +100,7 @@ class VPScoreEstimator(ScoreEstimator):
         return self.beta_min + (self.beta_max - self.beta_min) * times
     
 class subVPScoreEstimator(ScoreEstimator):
+    """ Class for score estimators with sub-variance preserving SDEs."""
     def __init__(
             self, 
             net: nn.Module,
@@ -112,10 +108,7 @@ class subVPScoreEstimator(ScoreEstimator):
             weight_fn: Union[str, Callable]='variance',
             beta_min: float=0.1,
             beta_max: float=20.,                        
-            ) -> None:
-        """
-        Class for score estimators with variance preserving (DDPM) SDEs.
-        """
+            ) -> None:        
         self.beta_min = beta_min
         self.beta_max = beta_max
         super().__init__(net, condition_shape, weight_fn=weight_fn)
@@ -131,19 +124,17 @@ class subVPScoreEstimator(ScoreEstimator):
 
 
 class VEScoreEstimator(ScoreEstimator):
+    """ Class for score estimators with variance exploding SDEs (i.e., SMLD)."""
     def __init__(
-            self, 
+            self,
             net: nn.Module,
             condition_shape: torch.Size,
             weight_fn: Union[str, Callable]='variance',
             sigma_min: float=0.01,
             sigma_max: float=10.,                        
-            ) -> None:
-        """
-        Class for score estimators with variance exploding (DDPM) SDEs.
-        """
-        self.sigma_min = sigma_min        
-        self.sigma_max = sigma_max       
+            ) -> None:        
+        self.sigma_min = sigma_min
+        self.sigma_max = sigma_max
         super().__init__(net, condition_shape, weight_fn=weight_fn)
 
     def mean_fn(self, x0, times):

@@ -4,59 +4,66 @@ import torch
 from torch.distributions.normal import Normal
 from zuko.utils import odeint
 from torch import Tensor
+from torch.distributions import Distribution
 
 
-class ScoreDistribution:
+class ScoreDistribution(Distribution):
     """Wrapper around ScoreEstimator to have objects with sample function"""
 
-    def __init__(self, score_estimator: ScoreEstimator, noise_distribution):
+    def __init__(self, 
+                 score_estimator: ScoreEstimator, 
+                 condition=None, 
+                 sample_with="sde"
+        ):
         super().__init__()
         self.score_estimator = score_estimator
         self.drift_fn = score_estimator.drift_fn
         self.diffusion_fn = score_estimator.diffusion_fn
-        self.condition_shape = score_estimator.condition_shape
+        #self.condition_shape = score_estimator.condition_shape
         self.step_size = 1000
         self.noise_distribution = Normal(
-            loc=score_estimator.mean, scale=score_estimator.stddev
+            loc=score_estimator.mean, scale=score_estimator.std
         )
+        self.condition = condition
+        self.sample_with = sample_with
 
-    def log_prob(self, inputs, context):
+    def log_prob(self, inputs):
         raise NotImplementedError()
 
-    def sample_with_sde(self, num_samples, context):
-        if context is None:
-            raise ValueError("No context is passed to SBDistribution.sample.")
+    def sample_with_sde(self, sample_shape, condition):
+        if condition is None:
+            raise ValueError("No condition is passed to SBDistribution.sample.")
         else:
-            theta = self.noise_distribution.sample(sample_shape=(num_samples,))
+            theta = self.noise_distribution.sample(sample_shape=sample_shape)
             delta_t = (
                 1 / self.step_size
             )  # depends if we want to ode and sde term by step_size, probably right?
 
             for step in range(self.step_size):
                 t = (step + 1) / self.step_size
-                theta = (
-                    theta
-                    + (
-                        self.drift_fn(theta, t=t)
-                        - (self.diffusion_fn(theta, t=t)) ** 2
-                        * self.score_estimator(theta, context=context, t=t)
-                    )
-                    * delta_t
-                    + self.diffusion_fn(theta, t=t)
-                    * torch.randn((num_samples,))*delta_t
-                )
+                theta = theta + (self.drift_fn(input=theta, t=t)
+                        - (self.diffusion_fn(t=t)) ** 2
+                        * self.score_estimator(input=theta, condition=condition, times=t)) * delta_t + self.diffusion_fn(t=t) * torch.randn(sample_shape) * delta_t
 
                 return theta
 
-    def sample_with_ode(self, num_samples, context):
+    def sample_with_ode(self, sample_shape, condition):
         def f(theta: Tensor, t) -> Tensor:
-            return self.drift_fn(theta, context=context, t=t) - 0.5*(
-                self.diffusion_fn(theta, context=context, t=t)
-            ) ** 2 * self.score_estimator(theta, context=context, t=t)
+            return self.drift_fn(input=theta, t=t) - 0.5*(
+                self.diffusion_fn(t=t)
+            ) ** 2 * self.score_estimator(theta, condition=condition, times=t)
 
         theta0 = self.noise_distribution.sample(
-            sample_shape=(num_samples,), context=context
+            sample_shape=sample_shape
         )
         theta1 = odeint(f, theta0, 0.0, 1.0)
 
         return theta1
+
+    def sample(self, sample_shape: torch.Size = torch.Size()) -> torch.Tensor:
+        if self.condition == None:
+            raise ValueError("sampling from the posterior is only possible when specifying a condition")
+        if self.sample_with == "sde":
+            return self.sample_with_sde(sample_shape = sample_shape, condition = self.condition)
+        if self.sample_with == "ode":
+            return self.sample_with_ode(sample_shape=sample_shape, condition = self.condition)

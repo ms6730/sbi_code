@@ -18,18 +18,9 @@ class ScoreEstimator(VectorFieldEstimator):
             weight_fn: Union[str, Callable]
             ) -> None:
         """
-        Class for score estimators with variance exploding (NCSN), variance preserving (DDPM), or sub-variance preserving SDEs.
+        Generic score estimator class for SDEs.
         """        
         super().__init__(net, condition_shape)
-        if net is None:
-            # Define a simple torch MLP network if not provided.
-            nn.MLP()
-
-        elif isinstance(net, nn.Module):
-            self.net = net
-
-        self.condition_shape = condition_shape
-        # Set mean and standard deviation functions based on the type of SDE and noise bounds.
 
         # Set lambdas (variance weights) function
         self._set_weight_fn(weight_fn)
@@ -51,27 +42,27 @@ class ScoreEstimator(VectorFieldEstimator):
     
     
     def forward(self, input: Tensor, condition: Tensor, times: Tensor) -> Tensor:
-        score = self.net(input, condition, times)
-        # Divide by standard deviation to mirror target score
+        # Predict noise and divide by standard deviation to mirror target score.
+        eps_pred = self.net(input, condition, times)        
         std = self.std_fn(times)
-        return score / std
+        return eps_pred / std
     
     def loss(self, input: Tensor, condition: Tensor) -> Tensor:
         """Denoising score matching loss (Song et al., ICLR 2021)."""
         # Sample diffusion times.
         times = torch.rand((input.shape[0],))
 
-        # Sample noise
+        # Sample noise.
         eps = torch.randn_like(input)
         
         # Compute mean and standard deviation.
         mean = self.mean_fn(input, times)
         std = self.std_fn(times)
 
-        # Get noised input, i.e., p(xt|x0)
+        # Get noised input, i.e., p(xt|x0).
         input_noised = mean + std * eps
 
-        # Compute true score: -(mean - noised_input) / (std**2)
+        # Compute true score: -(mean - noised_input) / (std**2).
         score_target = -eps / std
 
         # Predict score.
@@ -84,7 +75,7 @@ class ScoreEstimator(VectorFieldEstimator):
         loss = torch.sum((score_target - score_pred).pow(2.0), axis=-1)
         loss = torch.mean(weights * loss)
 
-        return loss    
+        return loss
 
     def _set_weight_fn(self, weight_fn):
         """Get the weight function."""

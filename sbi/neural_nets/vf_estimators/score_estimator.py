@@ -76,10 +76,9 @@ class ScoreEstimator(VectorFieldEstimator):
         weights = self.weight_fn(times)
 
         # Compute MSE loss between network output and true score.
-        loss = torch.sum((score_target - score_pred)**2.0, axis=-1)
-        loss = torch.mean(weights * loss)
+        loss = torch.sum((score_target - score_pred)**2.0, axis=-1)        
 
-        return loss
+        return weights*loss
 
     def _set_weight_fn(self, weight_fn):
         """Get the weight function."""

@@ -8,7 +8,7 @@ from torch import Tensor
 from torch.distributions import Distribution
 
 from sbi.inference.potentials.base_potential import BasePotential
-from sbi.neural_nets.vf_estimators import VectorFieldEstimator
+from sbi.neural_nets.vf_estimators.score_estimator import ScoreEstimator
 from sbi.types import TorchTransform
 from sbi.utils import mcmc_transform
 
@@ -16,7 +16,7 @@ from sbi.utils import mcmc_transform
 
 
 def score_estimator_based_potential(
-    score_estimator: VectorFieldEstimator,
+    score_estimator: ScoreEstimator,
     prior: Distribution,
     x_o: Optional[Tensor],
     diffusion_time: float,
@@ -39,9 +39,8 @@ class ScoreBasedPotential(BasePotential):
 
     def __init__(
         self,
-        score_estimator: VectorFieldEstimator,
+        score_estimator: ScoreEstimator,
         prior: Distribution,
-        diffusion_time: float,
         x_o: Optional[Tensor],
         diffusion_length: Optional[float] = None,
         device: str = "cpu",
@@ -58,10 +57,11 @@ class ScoreBasedPotential(BasePotential):
         super().__init__(prior, x_o, device=device)
 
         self.score_estimator = score_estimator
-        self.diffusion_time = diffusion_time
         self.diffusion_length = diffusion_length
 
-    def __call__(self, theta: Tensor, track_gradients: bool = True) -> Tensor:
+    def __call__(
+        self, theta: Tensor, diffusion_time: float, track_gradients: bool = True
+    ) -> Tensor:
         r"""Returns the potential function for score-based methods.
 
         Args:
@@ -77,18 +77,19 @@ class ScoreBasedPotential(BasePotential):
 
         if self.x_o.shape[0] > 1:
             assert self.diffusion_length is not None
+            # Diffusion length is required for Geffner bridge
             score_trial_sum = _bridge(
                 x=self.x_o,
                 theta=theta.to(self.device),
                 estimator=self.score_estimator,
-                diffusion_time=self.diffusion_time,
+                diffusion_time=diffusion_time,
                 prior=self.prior,
                 diffusion_lentgh=self.diffusion_length,
                 track_gradients=track_gradients,
             )
         else:
             score_trial_sum = self.score_estimator.forward(
-                self.x_o, self.diffusion_time, condition=theta
+                input=self.x_o, condition=theta, times=diffusion_time
             )
 
         return score_trial_sum
@@ -97,7 +98,7 @@ class ScoreBasedPotential(BasePotential):
 def _bridge(
     x: Tensor,
     theta: Tensor,
-    estimator: VectorFieldEstimator,
+    estimator: ScoreEstimator,
     diffusion_time: float,
     prior: Distribution,
     diffusion_lentgh: Optional[float],
@@ -123,7 +124,9 @@ def _bridge(
 
     # Calculate likelihood in one batch.
     with torch.set_grad_enabled(track_gradients):
-        score_trial_batch = estimator.forward(x, diffusion_time, condition=theta)
+        score_trial_batch = estimator.forward(
+            input=x, condition=theta, times=diffusion_time
+        )
         # Reshape to (-1, theta_batch_size), sum over trial-log likelihoods.
         score_trial_sum = score_trial_batch.sum(0)
 

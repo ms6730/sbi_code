@@ -1,24 +1,22 @@
 # This file is part of sbi, a toolkit for simulation-based inference. sbi is licensed
 # under the Affero General Public License v3, see <https://www.gnu.org/licenses/>.
 from typing import Optional, Union
-
+from functools import identity
 
 import torch
 import torch.nn as nn
 from torch import Tensor, log
 from torch.distributions import Distribution
-from torch.distributions import identity_transform
 
 from sbi.inference.posteriors.base_posterior import NeuralPosterior
-from sbi.inference.potentials.posterior_based_potential import (
-    posterior_estimator_based_potential,
-)
+from sbi.inference.potentials.score_based_potential import score_estimator_based_potential
 from sbi.samplers.rejection.rejection import accept_reject_sample
 from sbi.types import Shape
 from sbi.utils import check_prior, within_support
 from sbi.utils.torchutils import ensure_theta_batched
 
 from sbi.neural_nets.vf_estimators.score_estimator import ScoreEstimator
+from sbi.neural_nets.vf_estimators.score_based_distribution import ScoreDistribution
 
 
 class ScorePosterior(NeuralPosterior):
@@ -61,8 +59,12 @@ class ScorePosterior(NeuralPosterior):
         # builds it itself. The `potential_fn` and `theta_transform` are used only for
         # obtaining the MAP.
         check_prior(prior)
-        potential_fn = score_estimator  # ??
-        theta_transform = identity_transform  # later to be modified for MCMC
+        potential_fn, theta_transform = score_estimator_based_potential(
+            score_estimator=score_estimator,
+            prior=prior,
+            x_0=None
+        )
+
 
         super().__init__(
             potential_fn=potential_fn,
@@ -74,11 +76,15 @@ class ScorePosterior(NeuralPosterior):
         self.prior = prior
         self.score_estimator = score_estimator
 
+
+
+
         self.max_sampling_batch_size = max_sampling_batch_size
         self._leakage_density_correction_factor = None
 
         self._purpose = """It samples from the diffusion model given the score_estimator and rejects samples that
             lie outside of the prior bounds."""
+
 
     def sample(
         self,
@@ -100,7 +106,7 @@ class ScorePosterior(NeuralPosterior):
         """
 
         num_samples = torch.Size(sample_shape).numel()
-        condition_shape = self.score_estimator._condition_shape
+        condition_shape = self.score_estimator.condition_shape
         x = self._x_else_default_x(x)
 
         try:
@@ -125,8 +131,9 @@ class ScorePosterior(NeuralPosterior):
                 f"`.build_posterior(sample_with={sample_with}).`"
             )
 
+        proposal = ScoreDistribution(score_estimator=self.score_estimator, condition = x, sample_with = 'sde')
         samples = accept_reject_sample(
-            proposal=self,  # type Union[nn.module, Distribution, NeuralPosterior]
+            proposal=proposal,  # type Union[nn.module, Distribution, NeuralPosterior]
             accept_reject_fn=lambda theta: within_support(self.prior, theta),
             num_samples=num_samples,
             show_progress_bars=show_progress_bars,
@@ -136,7 +143,7 @@ class ScorePosterior(NeuralPosterior):
         )[0]
 
         return samples
-
+'''
     def log_prob(
         self,
         theta: Tensor,
@@ -328,3 +335,4 @@ class ScorePosterior(NeuralPosterior):
             show_progress_bars=show_progress_bars,
             force_update=force_update,
         )
+'''

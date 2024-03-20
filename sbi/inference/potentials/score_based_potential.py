@@ -60,7 +60,7 @@ class ScoreBasedPotential(BasePotential):
         self.diffusion_length = diffusion_length
 
     def __call__(
-        self, theta: Tensor, diffusion_time: float, track_gradients: bool = True
+        self, theta: Tensor, diffusion_time: Tensor, track_gradients: bool = True
     ) -> Tensor:
         r"""Returns the potential function for score-based methods.
 
@@ -89,7 +89,7 @@ class ScoreBasedPotential(BasePotential):
             )
         else:
             score_trial_sum = self.score_estimator.forward(
-                input=self.x_o, condition=theta, times=diffusion_time
+                input=theta, condition=self.x_o, times=diffusion_time
             )
 
         return score_trial_sum
@@ -99,7 +99,7 @@ def _bridge(
     x: Tensor,
     theta: Tensor,
     estimator: ScoreEstimator,
-    diffusion_time: float,
+    diffusion_time: Tensor,
     prior: Distribution,
     diffusion_lentgh: Optional[float],
     track_gradients: bool = False,
@@ -110,10 +110,8 @@ def _bridge(
     experimental conditions.
     """
 
-    # NOTE: Should conform to (batch_size1, 1, input_size) + (batch_size2, *condition_shape)
-    # unsqueeze to ensure that the x-batch dimension is the first dimension for the
-    # broadcasting of the density estimator.
-
+    # TODO: this does not conform to the new condition shapes
+    # any unsqueezing should not be necessary here
     x = torch.as_tensor(x).reshape(-1, x.shape[-1]).unsqueeze(1)
     num_obs = x.shape[0]
     assert (
@@ -125,7 +123,7 @@ def _bridge(
     # Calculate likelihood in one batch.
     with torch.set_grad_enabled(track_gradients):
         score_trial_batch = estimator.forward(
-            input=x, condition=theta, times=diffusion_time
+            input=theta, condition=x, times=diffusion_time
         )
         # Reshape to (-1, theta_batch_size), sum over trial-log likelihoods.
         score_trial_sum = score_trial_batch.sum(0)

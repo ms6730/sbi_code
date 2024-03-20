@@ -30,26 +30,26 @@ class ScoreEstimator(VectorFieldEstimator):
 
         self.condition_shape = condition_shape
         # Set mean and standard deviation functions based on the type of SDE and noise bounds.
-        self._set_mean_std_fn(sde_type, noise_minmax)
-
 
         # Set lambdas (variance weights) function
         self._set_weight_fn(weight_fn)
-        
+
+        self.mean = 0.0  # this still needs to be computed (mean of the noise distribution)
+        self.std = 1.0  # same
+    
     def mean_fn(self, x0, times):
         raise NotImplementedError
     
     def std_fn(self, times):
         raise NotImplementedError
 
-        # Set drift and diffusion function
-        self._set_drift_diffusion_fn()
-
-        self.mean = (
-            0.0  # this still needs to be computed (mean of the noise distribution)
-        )
-        self.std = 1.0  # same
-
+    def diffusion_fn(self, t):
+        raise NotImplementedError
+    
+    def drift_fn(self, input, t):
+        raise NotImplementedError
+    
+    
     def forward(self, input: Tensor, condition: Tensor, times: Tensor) -> Tensor:
         score = self.net(input, condition, times)
         # Divide by standard deviation to mirror target score
@@ -121,6 +121,12 @@ class VPScoreEstimator(ScoreEstimator):
     def _beta_schedule(self, times):
         return self.beta_min + (self.beta_max - self.beta_min) * times
     
+    def drift_fn(self, input, t):
+        return -0.5 * self._beta_schedule(t) * input
+    
+    def diffusion_fn(self, t):
+        return sqrt(self._beta_schedule(t) * (- exp(-2 * self.beta_min * t - (self.beta_max - self.beta_min) * t**2)))
+
 class subVPScoreEstimator(ScoreEstimator):
     """ Class for score estimators with sub-variance preserving SDEs."""
     def __init__(
@@ -144,6 +150,11 @@ class subVPScoreEstimator(ScoreEstimator):
     def _beta_schedule(self, times):
         return self.beta_min + (self.beta_max - self.beta_min) * times
 
+    def drift_fn(self, input, t):
+        return -0.5 * self._beta_schedule(t) * input
+
+    def diffusion_fn(self, t):
+        return sqrt(self._beta_schedule(t))
 
 class VEScoreEstimator(ScoreEstimator):
     """ Class for score estimators with variance exploding SDEs (i.e., SMLD)."""
@@ -167,3 +178,9 @@ class VEScoreEstimator(ScoreEstimator):
     
     def _sigma_schedule(self, times):
         return self.sigma_min * (self.sigma_max / self.sigma_min).pow(times)
+    
+    def drift_fn(self, input, t):
+        return 0.0
+
+    def diffusion_fn(self, t):
+        return self._sigma_schedule(t) * sqrt(2 * log(self.sigma_max / self.sigma_min))

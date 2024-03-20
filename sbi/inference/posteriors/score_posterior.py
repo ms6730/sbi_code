@@ -61,6 +61,7 @@ class ScorePosterior(NeuralPosterior):
             score_estimator=score_estimator,
             prior=prior,
             x_o=None
+            x_o_shape=x_shape,
         )
 
 

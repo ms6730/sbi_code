@@ -27,7 +27,6 @@ from sbi.utils import (
     RestrictedPrior,
     check_estimator_arg,
     handle_invalid_x,
-    nle_nre_apt_msg_on_invalid_x,
     npe_msg_on_invalid_x,
     test_posterior_net_for_multi_d_x,
     validate_theta_and_x,
@@ -129,12 +128,9 @@ class NSPE(NeuralInference):
             # self._round = max(self._data_round_index))
             current_round = 0
         else:
-            if not self._data_round_index:
-                # This catches a pretty specific case: if, in the first round, one
-                # passes data that does not come from the prior.
-                current_round = 1
-            else:
-                current_round = max(self._data_round_index) + 1
+            raise NotImplementedError(
+                "Multi-round NSPE is not yet implemented. Please use single-round NSPE."
+            )
 
         if exclude_invalid_x is None:
             exclude_invalid_x = current_round == 0
@@ -418,7 +414,7 @@ class NSPE(NeuralInference):
         score_estimator: Optional[ScoreEstimator] = None,
         prior: Optional[Distribution] = None,
         sample_with: str = "sde",
-    ) -> Union[MCMCPosterior, RejectionPosterior, VIPosterior, DirectPosterior]:
+    ) -> Union[ScorePosterior, DirectPosterior]:
         r"""Build posterior from the neural density estimator.
 
         For SNPE, the posterior distribution that is returned here implements the
@@ -480,8 +476,9 @@ class NSPE(NeuralInference):
         if sample_with == "ode":
             raise NotImplementedError("ODE-based sampling is not yet implemented.")
         elif sample_with == "sde":
-            return ScorePosterior(score_estimator, prior)
+            posterior = ScorePosterior(score_estimator, prior)
        
+        self._posterior = posterior
         # Store models at end of each round.
         self._model_bank.append(deepcopy(self._posterior))
 
@@ -495,6 +492,7 @@ class NSPE(NeuralInference):
         masks: Tensor,
         proposal: Optional[Any],
     ) -> Tensor:
+        
         raise NotImplementedError
 
     def _loss(

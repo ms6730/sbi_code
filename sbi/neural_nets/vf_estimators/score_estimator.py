@@ -239,7 +239,7 @@ class VEScoreEstimator(ScoreEstimator):
         return self.sigma_min * (self.sigma_max / self.sigma_min) ** times
 
     def drift_fn(self, input, t):
-        return torch.tenosr([0.0])
+        return torch.tensor([0.0])
 
     def diffusion_fn(self, t):
         g = self._sigma_schedule(t) * torch.sqrt(2 * torch.log(self.sigma_max / self.sigma_min))

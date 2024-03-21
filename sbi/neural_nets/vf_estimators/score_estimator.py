@@ -49,6 +49,10 @@ class ScoreEstimator(VectorFieldEstimator):
         raise NotImplementedError
 
     def forward(self, input: Tensor, condition: Tensor, times: Tensor) -> Tensor:
+        # Expand times if it's a scalar.        
+        if times.ndim == 1:
+            times = times.expand(input.shape[0])            
+
         # Predict noise and divide by standard deviation to mirror target score.
         eps_pred = self.net([input, condition, times])
         std = self.std_fn(times)

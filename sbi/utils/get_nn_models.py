@@ -18,6 +18,8 @@ from sbi.neural_nets.flow import (
     build_nsf,
     build_zuko_maf,
 )
+from sbi.neural_nets.vector_field import build_score_estimator
+
 from sbi.neural_nets.mdn import build_mdn
 from sbi.neural_nets.mnle import build_mnle
 
@@ -290,3 +292,34 @@ def posterior_nn(
         kwargs.pop("num_components")
 
     return build_fn_snpe_a if model == "mdn_snpe_a" else build_fn
+
+
+def score_posterior_nn(
+    model: str,
+    z_score_theta: Optional[str] = "independent",
+    z_score_x: Optional[str] = "independent",
+    hidden_features: int = 50,
+    
+    
+    embedding_net: nn.Module = nn.Identity(),
+    num_components: int = 10,
+    **kwargs,
+) -> Callable:
+    
+    return build_score_estimator(batch_x=batch_theta, batch_y=batch_x, **kwargs)
+    # def build_fn(batch_theta, batch_x):
+    #     if model == "vpe":
+    #         return build_mdn(batch_x=batch_theta, batch_y=batch_x, **kwargs)
+    #     elif model == "made":
+    #         return build_made(batch_x=batch_theta, batch_y=batch_x, **kwargs)
+    #     elif model == "maf":
+    #         return build_maf(batch_x=batch_theta, batch_y=batch_x, **kwargs)
+    #     elif model == "maf_rqs":
+    #         return build_maf_rqs(batch_x=batch_theta, batch_y=batch_x, **kwargs)
+    #     elif model == "nsf":
+    #         return build_nsf(batch_x=batch_theta, batch_y=batch_x, **kwargs)
+    #     elif model == "zuko_maf":
+    #         return build_zuko_maf(batch_x=batch_theta, batch_y=batch_x, **kwargs)
+    #     else:
+    #         raise NotImplementedError
+    # return build_fn

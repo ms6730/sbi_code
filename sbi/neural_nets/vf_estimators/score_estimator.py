@@ -1,11 +1,9 @@
-from math import exp, log, sqrt
-from typing import Tuple, Union, Optional, Callable
+from typing import Union, Callable
 
 import torch
 from torch import Tensor, nn
-
 from sbi.neural_nets.vf_estimators.base import VectorFieldEstimator
-from sbi.types import Shape
+
 
 
 class ScoreEstimator(VectorFieldEstimator):
@@ -33,8 +31,11 @@ class ScoreEstimator(VectorFieldEstimator):
         )
         self.std = 1.0  # same
 
-    def mean_fn(self, x0, times):
+    def mean_t_fn(self, times):
         raise NotImplementedError
+    
+    def mean_fn(self, x0, times):
+        return self.mean_t_fn(times) * x0
 
     def std_fn(self, times):
         raise NotImplementedError
@@ -46,10 +47,26 @@ class ScoreEstimator(VectorFieldEstimator):
         raise NotImplementedError
 
     def forward(self, input: Tensor, condition: Tensor, times: Tensor) -> Tensor:
+        # Expand times if it's a scalar.        
+        if times.ndim == 1:
+            times = times.expand(input.shape[0])            
+
         # Predict noise and divide by standard deviation to mirror target score.
+        # TODO Replace with Michaels magic shapeing function
+        print(input.shape, condition.shape, times.shape)
+        if times.shape.numel() == 1:
+            times = torch.repeat_interleave(times[None], input.shape[0], dim=0)
+            times = times.reshape((input.shape[0],))
+        input_shape = input.shape
+        input = input.reshape((-1, input.shape[-1]))
+        condition = condition.reshape(-1, condition.shape[-1])
+        condition = torch.repeat_interleave(condition, input.shape[0]//condition.shape[0], dim=0)
+        #print(input.shape, condition.shape, times.shape)
         eps_pred = self.net([input, condition, times])
         std = self.std_fn(times)
-        return eps_pred / std
+        eps_pred = eps_pred
+        score =  eps_pred / std
+        return score.reshape(input_shape)
     
     def loss(self, input: Tensor, condition: Tensor) -> Tensor:
         """Denoising score matching loss (Song et al., ICLR 2021)."""
@@ -76,7 +93,7 @@ class ScoreEstimator(VectorFieldEstimator):
         weights = self.weight_fn(times)
 
         # Compute MSE loss between network output and true score.
-        loss = torch.sum((score_target - score_pred)**2.0, axis=-1)        
+        loss = torch.sum((score_target - score_pred)**2.0, dim=-1)        
 
         return weights*loss
 
@@ -110,34 +127,36 @@ class VPScoreEstimator(ScoreEstimator):
         self.beta_max = beta_max
         super().__init__(net, condition_shape, weight_fn=weight_fn)
 
-    def mean_fn(self, x0, times):
+    def mean_t_fn(self, times):
         a = torch.exp(
                 -0.25 * times**2.0 * (self.beta_max - self.beta_min)
                 - 0.5 * times * self.beta_min
             )
-            
-        mean = a.unsqueeze(-1) * x0
-        return mean
-        
-
+        return a.unsqueeze(-1)
+    
     def std_fn(self, times):
         std =  1.0 - torch.exp(
             -0.5 * times**2.0 * (self.beta_max - self.beta_min)
             - times * self.beta_min
         )
-        return  torch.sqrt(std.unsqueeze(-1))
+        return torch.sqrt(std.unsqueeze(-1))
 
     def _beta_schedule(self, times):
         return self.beta_min + (self.beta_max - self.beta_min) * times
 
     def drift_fn(self, input, t):
-        return -0.5 * self._beta_schedule(t).unsqueeze(-1) * input
+        phi = -0.5 * self._beta_schedule(t)
+        while len(phi.shape) < len(input.shape):
+            phi = phi.unsqueeze(-1)
+        return phi * input
 
-    def diffusion_fn(self, t):
+    def diffusion_fn(self, input, t):
         g = torch.sqrt(
             self._beta_schedule(t)
         )
-        return g.unsqueeze(-1)
+        while len(g.shape) < len(input.shape):
+            g = g.unsqueeze(-1)
+        return g
 
 
 class subVPScoreEstimator(ScoreEstimator):
@@ -155,36 +174,43 @@ class subVPScoreEstimator(ScoreEstimator):
         self.beta_max = beta_max
         super().__init__(net, condition_shape, weight_fn=weight_fn)
 
-    def mean_fn(self, x0, times):
+    def mean_t_fn(self, times):
         a = torch.exp(
                 -0.25 * times**2.0 * (self.beta_max - self.beta_min)
                 - 0.5 * times * self.beta_min
-        )
-            
-            
-        return a.unsqueeze(-1) * x0
+        )                        
+        return a.unsqueeze(-1)
 
-    def std_fn(self, times):
-        std =  (
-            1.0
-            - torch.exp(
+    def std_fn(self, times):        
+        std = 1.0 - torch.exp(
                 -0.5 * times**2.0 * (self.beta_max - self.beta_min)
                 - times * self.beta_min
-            )
-        )**2.0
-        
+            )        
         return std.unsqueeze(-1)
 
     def _beta_schedule(self, times):
         return self.beta_min + (self.beta_max - self.beta_min) * times
 
     def drift_fn(self, input, t):
-        return -0.5 * self._beta_schedule(t) * input
+        
+        phi = -0.5 * self._beta_schedule(t) 
+        
+        while len(phi.shape) < len(input.shape):
+            phi = phi.unsqueeze(-1)
+        
+        return phi * input
 
-    def diffusion_fn(self, t):
-        return torch.sqrt(
+    def diffusion_fn(self, input, t):
+        g = torch.sqrt(
             self._beta_schedule(t)
             * (-torch.exp(-2 * self.beta_min * t - (self.beta_max - self.beta_min) * t**2)))
+        
+        while len(g.shape) < len(input.shape):
+            g = g.unsqueeze(-1)
+        
+        return g
+        
+        
 
 
 class VEScoreEstimator(ScoreEstimator):
@@ -202,18 +228,23 @@ class VEScoreEstimator(ScoreEstimator):
         self.sigma_max = sigma_max
         super().__init__(net, condition_shape, weight_fn=weight_fn)
 
-    def mean_fn(self, x0, times):
-        return x0
+    def mean_t_fn(self, times):
+        return 1.0
 
     def std_fn(self, times):
-        std = self.sigma_min**2.0 * (self.sigma_max / self.sigma_min) ** (2.0 * times)
+        std = self.sigma_min * (self.sigma_max / self.sigma_min) ** times
         return std.unsqueeze(-1)
 
     def _sigma_schedule(self, times):
         return self.sigma_min * (self.sigma_max / self.sigma_min) ** times
 
     def drift_fn(self, input, t):
-        return 0.0
+        return torch.tenosr([0.0])
 
     def diffusion_fn(self, t):
-        return self._sigma_schedule(t) * torch.sqrt(2 * torch.log(self.sigma_max / self.sigma_min))
+        g = self._sigma_schedule(t) * torch.sqrt(2 * torch.log(self.sigma_max / self.sigma_min))
+        
+        while len(g.shape) < len(input.shape):
+            g = g.unsqueeze(-1)
+        
+        return g

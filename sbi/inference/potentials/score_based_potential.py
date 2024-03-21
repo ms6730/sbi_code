@@ -9,7 +9,7 @@ from torch.distributions import Distribution
 
 from sbi.inference.potentials.base_potential import BasePotential
 from sbi.neural_nets.vf_estimators.score_estimator import ScoreEstimator
-from sbi.types import TorchTransform
+from sbi.sbi_types import TorchTransform
 from sbi.utils import mcmc_transform
 
 # NOTE: rough draft for score_based potentials!

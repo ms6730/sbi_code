@@ -33,8 +33,11 @@ class ScoreEstimator(VectorFieldEstimator):
         )
         self.std = 1.0  # same
 
-    def mean_fn(self, x0, times):
+    def mean_t_fn(self, times):
         raise NotImplementedError
+    
+    def mean_fn(self, x0, times):
+        return self.mean_t_fn(times) * x0
 
     def std_fn(self, times):
         raise NotImplementedError
@@ -110,22 +113,19 @@ class VPScoreEstimator(ScoreEstimator):
         self.beta_max = beta_max
         super().__init__(net, condition_shape, weight_fn=weight_fn)
 
-    def mean_fn(self, x0, times):
+    def mean_t_fn(self, times):
         a = torch.exp(
                 -0.25 * times**2.0 * (self.beta_max - self.beta_min)
                 - 0.5 * times * self.beta_min
             )
-            
-        mean = a.unsqueeze(-1) * x0
-        return mean
-        
-
+        return a.unsqueeze(-1)
+    
     def std_fn(self, times):
         std =  1.0 - torch.exp(
             -0.5 * times**2.0 * (self.beta_max - self.beta_min)
             - times * self.beta_min
         )
-        return  torch.sqrt(std.unsqueeze(-1))
+        return torch.sqrt(std.unsqueeze(-1))
 
     def _beta_schedule(self, times):
         return self.beta_min + (self.beta_max - self.beta_min) * times
@@ -155,24 +155,18 @@ class subVPScoreEstimator(ScoreEstimator):
         self.beta_max = beta_max
         super().__init__(net, condition_shape, weight_fn=weight_fn)
 
-    def mean_fn(self, x0, times):
+    def mean_t_fn(self, times):
         a = torch.exp(
                 -0.25 * times**2.0 * (self.beta_max - self.beta_min)
                 - 0.5 * times * self.beta_min
-        )
-            
-            
-        return a.unsqueeze(-1) * x0
+        )                        
+        return a.unsqueeze(-1)
 
-    def std_fn(self, times):
-        std =  (
-            1.0
-            - torch.exp(
+    def std_fn(self, times):        
+        std = 1.0 - torch.exp(
                 -0.5 * times**2.0 * (self.beta_max - self.beta_min)
                 - times * self.beta_min
-            )
-        )**2.0
-        
+            )        
         return std.unsqueeze(-1)
 
     def _beta_schedule(self, times):
@@ -202,11 +196,11 @@ class VEScoreEstimator(ScoreEstimator):
         self.sigma_max = sigma_max
         super().__init__(net, condition_shape, weight_fn=weight_fn)
 
-    def mean_fn(self, x0, times):
-        return x0
+    def mean_t_fn(self, times):
+        return 1.0
 
     def std_fn(self, times):
-        std = self.sigma_min**2.0 * (self.sigma_max / self.sigma_min) ** (2.0 * times)
+        std = self.sigma_min * (self.sigma_max / self.sigma_min) ** times
         return std.unsqueeze(-1)
 
     def _sigma_schedule(self, times):

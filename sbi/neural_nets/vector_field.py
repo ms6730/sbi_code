@@ -139,9 +139,10 @@ def build_mlp_regression(
     )
 
     neural_net = nn.Sequential(input_layer, neural_net)
-
     return neural_net
 
+
+# def build
 
 # TO DO:
 # - separate the actual network architecture from the build function

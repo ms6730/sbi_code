@@ -1,11 +1,9 @@
-from math import exp, log, sqrt
-from typing import Tuple, Union, Optional, Callable
+from typing import Union, Callable
 
 import torch
 from torch import Tensor, nn
-
 from sbi.neural_nets.vf_estimators.base import VectorFieldEstimator
-# from sbi.types import Shape
+
 
 
 class ScoreEstimator(VectorFieldEstimator):
@@ -62,7 +60,7 @@ class ScoreEstimator(VectorFieldEstimator):
         input = input.reshape((-1, input.shape[-1]))
         condition = condition.reshape(-1, condition.shape[-1])
         condition = torch.repeat_interleave(condition, input.shape[0]//condition.shape[0], dim=0)
-        #print(input.shape, condition.shape, times.shape)
+        print(input.shape, condition.shape, times.shape)
         eps_pred = self.net([input, condition, times])
         std = self.std_fn(times)
         eps_pred = eps_pred
@@ -94,7 +92,7 @@ class ScoreEstimator(VectorFieldEstimator):
         weights = self.weight_fn(times)
 
         # Compute MSE loss between network output and true score.
-        loss = torch.sum((score_target - score_pred)**2.0, axis=-1)        
+        loss = torch.sum((score_target - score_pred)**2.0, dim=-1)        
 
         return weights*loss
 

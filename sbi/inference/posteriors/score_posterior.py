@@ -11,7 +11,7 @@ from sbi.inference.posteriors.base_posterior import NeuralPosterior
 from sbi.inference.potentials.score_based_potential import score_estimator_based_potential
 from sbi.samplers.rejection.rejection import accept_reject_sample
 from sbi.samplers.score.score import score_based_sampler
-from sbi.types import Shape
+from sbi.sbi_types import Shape
 from sbi.utils import check_prior, within_support
 from sbi.utils.torchutils import ensure_theta_batched
 

@@ -135,13 +135,18 @@ class VPScoreEstimator(ScoreEstimator):
         return self.beta_min + (self.beta_max - self.beta_min) * times
 
     def drift_fn(self, input, t):
-        return -0.5 * self._beta_schedule(t).unsqueeze(-1) * input
+        phi = -0.5 * self._beta_schedule(t)
+        while len(phi.shape) < len(input.shape):
+            phi = phi.unsqueeze(-1)
+        return phi * input
 
-    def diffusion_fn(self, t):
+    def diffusion_fn(self, input, t):
         g = torch.sqrt(
             self._beta_schedule(t)
         )
-        return g.unsqueeze(-1)
+        while len(g.shape) < len(input.shape):
+            g = g.unsqueeze(-1)
+        return g
 
 
 class subVPScoreEstimator(ScoreEstimator):
@@ -177,12 +182,25 @@ class subVPScoreEstimator(ScoreEstimator):
         return self.beta_min + (self.beta_max - self.beta_min) * times
 
     def drift_fn(self, input, t):
-        return -0.5 * self._beta_schedule(t) * input
+        
+        phi = -0.5 * self._beta_schedule(t) 
+        
+        while len(phi.shape) < len(input.shape):
+            phi = phi.unsqueeze(-1)
+        
+        return phi * input
 
-    def diffusion_fn(self, t):
-        return torch.sqrt(
+    def diffusion_fn(self, input, t):
+        g = torch.sqrt(
             self._beta_schedule(t)
             * (-torch.exp(-2 * self.beta_min * t - (self.beta_max - self.beta_min) * t**2)))
+        
+        while len(g.shape) < len(input.shape):
+            g = g.unsqueeze(-1)
+        
+        return g
+        
+        
 
 
 class VEScoreEstimator(ScoreEstimator):
@@ -211,7 +229,12 @@ class VEScoreEstimator(ScoreEstimator):
         return self.sigma_min * (self.sigma_max / self.sigma_min) ** times
 
     def drift_fn(self, input, t):
-        return 0.0
+        return torch.tenosr([0.0])
 
     def diffusion_fn(self, t):
-        return self._sigma_schedule(t) * torch.sqrt(2 * torch.log(self.sigma_max / self.sigma_min))
+        g = self._sigma_schedule(t) * torch.sqrt(2 * torch.log(self.sigma_max / self.sigma_min))
+        
+        while len(g.shape) < len(input.shape):
+            g = g.unsqueeze(-1)
+        
+        return g

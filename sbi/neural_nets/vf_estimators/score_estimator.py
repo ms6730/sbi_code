@@ -5,7 +5,7 @@ import torch
 from torch import Tensor, nn
 
 from sbi.neural_nets.vf_estimators.base import VectorFieldEstimator
-from sbi.types import Shape
+# from sbi.types import Shape
 
 
 class ScoreEstimator(VectorFieldEstimator):

@@ -185,7 +185,7 @@ def build_score_estimator(
     elif sde_type == 'subv':
         estimator = subVPScoreEstimator
     else:
-        raise ValueError(f"Unknown SDE type: {sde_type}")
+        raise ValueError(f"SDE type: {sde_type} not supported.")
 
     neural_net = nn.Sequential(input_layer, score_net)
     return estimator(neural_net, batch_y.shape, **kwargs)

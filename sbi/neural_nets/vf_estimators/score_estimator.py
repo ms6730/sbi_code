@@ -134,9 +134,9 @@ class VPScoreEstimator(ScoreEstimator):
         return -0.5 * self._beta_schedule(t) * input
 
     def diffusion_fn(self, t):
-        return sqrt(
+        return torch.sqrt(
             self._beta_schedule(t)
-            * (-exp(-2 * self.beta_min * t - (self.beta_max - self.beta_min) * t**2))
+            * (-torch.exp(-2 * self.beta_min * t - (self.beta_max - self.beta_min) * t**2))
         )
 
 
@@ -182,7 +182,7 @@ class subVPScoreEstimator(ScoreEstimator):
         return -0.5 * self._beta_schedule(t) * input
 
     def diffusion_fn(self, t):
-        return sqrt(self._beta_schedule(t))
+        return torch.sqrt(self._beta_schedule(t))
 
 
 class VEScoreEstimator(ScoreEstimator):
@@ -214,4 +214,4 @@ class VEScoreEstimator(ScoreEstimator):
         return 0.0
 
     def diffusion_fn(self, t):
-        return self._sigma_schedule(t) * sqrt(2 * log(self.sigma_max / self.sigma_min))
+        return self._sigma_schedule(t) * torch.sqrt(2 * torch.log(self.sigma_max / self.sigma_min))

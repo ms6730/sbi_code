@@ -90,24 +90,24 @@ class ScoreEstimator(VectorFieldEstimator):
         """
         raise NotImplementedError
 
-    def drift_fn(self, input: Tensor, t: Tensor)-> Tensor:
+    def drift_fn(self, input: Tensor, times: Tensor)-> Tensor:
         r"""Drift function, f(x,t), of the SDE described by dx = f(x,t)dt + g(x,t)dW.
 
         Args:
             input: Original data, x0.
-            t: SDE time variable in [0,1].
+            times: SDE time variable in [0,1].
 
         Raises:
             NotImplementedError: This method is implemented in each individual SDE classes.
         """
         raise NotImplementedError
     
-    def diffusion_fn(self, input: Tensor, t: Tensor) -> Tensor:
+    def diffusion_fn(self, input: Tensor, times: Tensor) -> Tensor:
         r"""Diffusion function, g(x,t), of the SDE described by dx = f(x,t)dt + g(x,t)dW.
 
         Args:
             input: Original data, x0.
-            t: SDE time variable in [0,1].
+            times: SDE time variable in [0,1].
 
         Raises:
             NotImplementedError: This method is implemented in each individual SDE classes.
@@ -198,9 +198,9 @@ class ScoreEstimator(VectorFieldEstimator):
                 - a custom function that returns a Callable.        
         """
         if weight_fn == "identity":
-            self.weight_fn = lambda t: 1
+            self.weight_fn = lambda times: 1
         elif weight_fn == "max_likelihood":
-            self.weight_fn = lambda t: self.diffusion_fn(torch.ones((1,)),t)**2        
+            self.weight_fn = lambda times: self.diffusion_fn(torch.ones((1,)),times)**2        
         elif callable(weight_fn):
             self.weight_fn = weight_fn
         else:
@@ -260,33 +260,33 @@ class VPScoreEstimator(ScoreEstimator):
         """
         return self.beta_min + (self.beta_max - self.beta_min) * times
 
-    def drift_fn(self, input: Tensor, t: Tensor) -> Tensor:
+    def drift_fn(self, input: Tensor, times: Tensor) -> Tensor:
         """Drift function for variance preserving SDEs.
         
         Args:
             input: Original data, x0.
-            t: SDE time variable in [0,1].
+            times: SDE time variable in [0,1].
 
         Returns:
             Drift function at a given time.
         """
-        phi = -0.5 * self._beta_schedule(t)
+        phi = -0.5 * self._beta_schedule(times)
         while len(phi.shape) < len(input.shape):
             phi = phi.unsqueeze(-1)
         return phi * input
 
-    def diffusion_fn(self, input: Tensor, t: Tensor) -> Tensor:
+    def diffusion_fn(self, input: Tensor, times: Tensor) -> Tensor:
         """Diffusion function for variance preserving SDEs.
         
         Args:
             input: Original data, x0.
-            t: SDE time variable in [0,1].
+            times: SDE time variable in [0,1].
 
         Returns:
             Drift function at a given time.
         """
         g = torch.sqrt(
-            self._beta_schedule(t)
+            self._beta_schedule(times)
         )
         while len(g.shape) < len(input.shape):
             g = g.unsqueeze(-1)
@@ -347,36 +347,36 @@ class subVPScoreEstimator(ScoreEstimator):
         """
         return self.beta_min + (self.beta_max - self.beta_min) * times
 
-    def drift_fn(self, input: Tensor, t:Tensor) -> Tensor:
+    def drift_fn(self, input: Tensor, times:Tensor) -> Tensor:
         """Drift function for sub-variance preserving SDEs.
         
         Args:
             input: Original data, x0.
-            t: SDE time variable in [0,1].
+            times: SDE time variable in [0,1].
 
         Returns:
             Drift function at a given time.
         """
-        phi = -0.5 * self._beta_schedule(t) 
+        phi = -0.5 * self._beta_schedule(times) 
         
         while len(phi.shape) < len(input.shape):
             phi = phi.unsqueeze(-1)
         
         return phi * input
 
-    def diffusion_fn(self, input: Tensor, t: Tensor) -> Tensor:
+    def diffusion_fn(self, input: Tensor, times: Tensor) -> Tensor:
         """Diffusion function for sub-variance preserving SDEs.
         
         Args:
             input: Original data, x0.
-            t: SDE time variable in [0,1].
+            times: SDE time variable in [0,1].
 
         Returns:
             Diffusion function at a given time.
         """
         g = torch.sqrt(
-            self._beta_schedule(t)
-            * (-torch.exp(-2 * self.beta_min * t - (self.beta_max - self.beta_min) * t**2)))
+            self._beta_schedule(times)
+            * (-torch.exp(-2 * self.beta_min * times - (self.beta_max - self.beta_min) * times**2)))
         
         while len(g.shape) < len(input.shape):
             g = g.unsqueeze(-1)
@@ -433,29 +433,29 @@ class VEScoreEstimator(ScoreEstimator):
         """
         return self.sigma_min * (self.sigma_max / self.sigma_min) ** times
 
-    def drift_fn(self, input: Tensor, t: Tensor)-> Tensor:
+    def drift_fn(self, input: Tensor, times: Tensor)-> Tensor:
         """Drift function for variance exploding SDEs.
         
         Args:
             input: Original data, x0.
-            t: SDE time variable in [0,1].
+            times: SDE time variable in [0,1].
 
         Returns:
             Drift function at a given time.
         """
         return torch.tensor([0.0])
 
-    def diffusion_fn(self, input:Tensor, t: Tensor)-> Tensor:
+    def diffusion_fn(self, input:Tensor, times: Tensor)-> Tensor:
         """Diffusion function for variance exploding SDEs.
         
         Args:
             input: Original data, x0.
-            t: SDE time variable in [0,1].
+            times: SDE time variable in [0,1].
 
         Returns:
             Diffusion function at a given time.
         """
-        g = self._sigma_schedule(t) * torch.sqrt(2 * torch.log(self.sigma_max / self.sigma_min))
+        g = self._sigma_schedule(times) * torch.sqrt(2 * torch.log(torch.Tensor(self.sigma_max / self.sigma_min)))
         
         while len(g.shape) < len(input.shape):
             g = g.unsqueeze(-1)

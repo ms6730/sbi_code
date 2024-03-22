@@ -12,24 +12,33 @@ from sbi.neural_nets.vf_estimators.score_estimator import ScoreEstimator
 from sbi.sbi_types import TorchTransform
 from sbi.utils import mcmc_transform
 
-# NOTE: rough draft for score_based potentials!
-
 
 def score_estimator_based_potential(
     score_estimator: ScoreEstimator,
     prior: Distribution,
     x_o: Optional[Tensor],
     x_o_shape: Optional[Tuple[int, ...]] = None,
-    diffusion_length: Optional[int] = None,
-    enable_transform: bool = True,
+    enable_transform: bool = False,
 ) -> Tuple[Callable, TorchTransform]:
+    r"""Returns the potential function for score estimators.
+
+    Args:
+        score_estimator: The neural network modelling the score.
+        prior: The prior distribution.
+        x_o: The observed data at which to evaluate the score.
+        x_o_shape: The shape of the observed data.
+        enable_transform: Whether to enable transforms. Not supported yet.
+
+    """
     device = str(next(score_estimator.parameters()).device)
 
     potential_fn = ScoreBasedPotential(
-        score_estimator, prior, x_o, x_o_shape, diffusion_length, device=device
+        score_estimator, prior, x_o, x_o_shape, device=device
     )
 
-    # TODO Disabling transform for now, need to think how this affects the score
+    assert (
+        enable_transform is False
+    ), "Transforms are not yet supported for score estimators."
     theta_transform = mcmc_transform(prior, device=device, enable_transform=False)
 
     return potential_fn, theta_transform
@@ -41,10 +50,9 @@ class ScoreBasedPotential(BasePotential):
     def __init__(
         self,
         score_estimator: ScoreEstimator,
-        prior: Distribution,
+        prior: Optional[Distribution],
         x_o: Optional[Tensor],
         x_o_shape: Optional[Tuple[int, ...]] = None,
-        diffusion_length: Optional[float] = None,
         device: str = "cpu",
     ):
         r"""Returns the score function for score-based methods.
@@ -53,13 +61,12 @@ class ScoreBasedPotential(BasePotential):
             score_estimator: The neural network modelling the score.
             prior: The prior distribution.
             x_o: The observed data at which to evaluate the posterior.
+            x_o_shape: The shape of the observed data.
             device: The device on which to evaluate the potential.
         """
 
         super().__init__(prior, x_o, device=device)
-
         self.score_estimator = score_estimator
-        self.diffusion_length = diffusion_length
         self.x_o_shape = x_o_shape
 
     def __call__(
@@ -69,30 +76,43 @@ class ScoreBasedPotential(BasePotential):
 
         Args:
             theta: The parameters at which to evaluate the potential.
+            diffusion_time: The diffusion time.
             track_gradients: Whether to track gradients.
 
         Returns:
             The potential function.
         """
-        # theta shape (batch, (iid), event_dim)
+        if self._x_o is None:
+            raise ValueError(
+                "No observed data x_o is available. Please reinitialize \
+                the potential or manually set self._x_o."
+            )
 
-        # could also have a more lenient check here (just the length)
-        # this assumes that there is only one batch dimension
-        # is this assumption always valid?
+        # (batch, *event)[1:] == event?
+        # If no, multiple iid observations are are present.
         if self.x_o.shape[1:] == self.x_o_shape:
             score_trial_sum = self.score_estimator.forward(
                 input=theta, condition=self.x_o, times=diffusion_time
             )
         else:
-            assert self.diffusion_length is not None
-            # Diffusion length is required for Geffner bridge
+            if self.prior is None:
+                raise ValueError(
+                    "No observed data prior is available. Please reinitialize \
+                    the potential or manually set the prior."
+                )
+            if self.x_o_shape is None:
+                raise ValueError(
+                    "No observed data shape is available. Please reinitialize \
+                    the potential or manually set the shape."
+                )
+
             score_trial_sum = _bridge(
                 x=self.x_o,
+                x_shape=self.x_o_shape,
                 theta=theta.to(self.device),
                 estimator=self.score_estimator,
                 diffusion_time=diffusion_time,
                 prior=self.prior,
-                diffusion_lentgh=self.diffusion_length,
                 track_gradients=track_gradients,
             )
 
@@ -106,13 +126,20 @@ def _bridge(
     estimator: ScoreEstimator,
     diffusion_time: Tensor,
     prior: Distribution,
-    diffusion_lentgh: Optional[float],
     track_gradients: bool = False,
 ):
     r"""
-    Note: `x` can be a batch with batch size larger 1. Batches in `x` are assumed
-    to be iid trials, i.e., data generated based on the same paramters /
-    experimental conditions.
+    Returns the score-based potential for multiple IID observations. This can require a special solver
+    to obtain the correct tall posterior.
+
+    Args:
+        x: The observed data.
+        x_shape: The shape of the observed data.
+        theta: The parameters at which to evaluate the potential.
+        estimator: The neural network modelling the score.
+        diffusion_time: The diffusion time.
+        prior: The prior distribution.
+        track_gradients: Whether to track gradients.
     """
 
     assert (
@@ -125,9 +152,7 @@ def _bridge(
     num_obs = x.shape[-len(x_shape) - 1]
 
     # Calculate likelihood in one batch.
-    # TODO we need to figure out the axis where we sum or manually reshape to a
-    # compatible input for the score estimtor and then reshape and summing after
-    # obtaining the score.
+    # TODO needs to conform with the new shape handling
     with torch.set_grad_enabled(track_gradients):
         score_trial_batch = estimator.forward(
             input=theta, condition=x, times=diffusion_time
@@ -136,22 +161,30 @@ def _bridge(
         score_trial_sum = score_trial_batch.sum(0)
 
     return score_trial_sum + _get_prior_contribution(
-        diffusion_time, prior, theta, diffusion_lentgh, num_obs
+        diffusion_time, prior, theta, num_obs
     )
 
 
 def _get_prior_contribution(
-    diffusion_time: float,
+    diffusion_time: Tensor,
     prior: Distribution,
     theta: Tensor,
-    diffusion_length: Optional[float],
     num_obs: int,
 ):
-    # This method can be used to add several different bridges (Sharrock, Linhart)
+    r"""
+    Returns the prior contribution for multiple IID observations.
+
+    Args:
+        diffusion_time: The diffusion time.
+        prior: The prior distribution.
+        theta: The parameter values at which to evaluate the prior contribution.
+        num_obs: The number of independent observations.
+    """
+    # This method can be used to add several different bridges
     # to obtain the posterior for multiple IID observations.
     # For now, it only implements the approach by Geffner et al.
 
-    # TODO Check if prior has the grad property else use torch autograd
+    # TODO Check if prior has the grad property else use torch autograd.
     # For now just use autograd.
 
     log_prob_theta = prior.log_prob(theta)
@@ -163,6 +196,4 @@ def _get_prior_contribution(
         create_graph=True,
     )[0]
 
-    return (
-        (1 - num_obs) * (1.0 - diffusion_time / diffusion_length)
-    ) * grad_log_prob_theta
+    return ((1 - num_obs) * (1.0 - diffusion_time)) * grad_log_prob_theta

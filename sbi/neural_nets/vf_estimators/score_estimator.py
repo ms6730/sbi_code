@@ -7,7 +7,17 @@ from sbi.neural_nets.vf_estimators.base import VectorFieldEstimator
 
 
 class ScoreEstimator(VectorFieldEstimator):
-    r"""Score estimator for score-based generative models (e.g., denoising diffusion)."""
+    r"""Score matching for score-based generative models (e.g., denoising diffusion).
+    The estimator neural network (this class) learns the score function, i.e., gradient of 
+    the conditional probability density with respect to the input, which can be used to
+    generate samples from the target distribution by solving the SDE starting from the 
+    base (Gaussian) distribution.
+
+    Relevant literature: 
+    - Score-based generative modeling through SDE: https://arxiv.org/abs/2011.13456
+    - Denoising diffusion probabilistic models: https://arxiv.org/abs/2006.11239
+    - Noise conditional score networks: https://arxiv.org/abs/1907.05600
+    """
 
     def __init__(
         self,
@@ -15,39 +25,107 @@ class ScoreEstimator(VectorFieldEstimator):
         condition_shape: torch.Size,
         weight_fn: Union[str, Callable],
     ) -> None:
+        r""" Score estimator class that estimates the conditional score function, i.e., gradient of the density p(xt|x0).
+
+        Args:
+            net: Score estimator neural network, should take a list [input, condition, and time (in [0,1])].
+            condition_shape: Shape of the conditioning variable.
+            weight_fn: Function to compute the weights over time. Can be one of the following:
+                - "identity": constant weights (1.),
+                - "max_likelihood": weights proportional to the diffusion function, or
+                - a custom function that returns a Callable.
+
         """
-        Generic score estimator class for SDEs.
-        """        
         super().__init__(net, condition_shape)
 
-        # Set lambdas (variance weights) function
+        # Set lambdas (variance weights) function.
         self._set_weight_fn(weight_fn)
         
-        # Min time for diffusion (0 can be numerically unstable)
+        # Min time for diffusion (0 can be numerically unstable).
         self.T_min = 1e-3
 
-        self.mean = (
-            0.0  # this still needs to be computed (mean of the noise distribution)
-        )
-        self.std = 1.0  # same
+        # These still need to be computed (mean and std of the noise distribution).
+        self.mean = 0.0          
+        self.std = 1.0
 
-    def mean_t_fn(self, times):
+    def mean_t_fn(self, times: Tensor) -> Tensor:
+        r"""Conditional mean function, E[xt|x0], specifying the "mean factor" at a given time, 
+        which is always multiplied by x0 to get the mean of the noise distribution,
+        
+        i.e., p(xt|x0) = N(xt; mean_t(t)*x0, std_t(t)).
+
+        Args:
+            times: SDE time variable in [0,1].
+        
+        Raises:
+            NotImplementedError: This method is implemented in each individual SDE classes.
+        """
         raise NotImplementedError
     
-    def mean_fn(self, x0, times):
+    def mean_fn(self, x0: Tensor, times: Tensor) -> Tensor:
+        r"""Mean function of the SDE, which just multiplies the specific "mean factor" by 
+        the original input x0, to get the mean of the noise distribution,
+        
+        i.e., p(xt|x0) = N(xt; mean_t(t)*x0, std_t(t)).
+
+        Args:
+            x0: Initial input data.
+            times: SDE time variable in [0,1].
+
+        Returns:
+            Mean of the noise distribution at a given time.
+        """
         return self.mean_t_fn(times) * x0
 
-    def std_fn(self, times):
+    def std_fn(self, times: Tensor) -> Tensor:
+        r"""Standard deviation function of the noise distribution at a given time,
+        
+        i.e., p(xt|x0) = N(xt; mean_t(t)*x0, std_t(t)).
+
+        Args:
+            times: SDE time variable in [0,1].
+        
+        Raises:
+            NotImplementedError: This method is implemented in each individual SDE classes.
+        """
         raise NotImplementedError
 
-    def diffusion_fn(self, t):
-        raise NotImplementedError
+    def drift_fn(self, input: Tensor, t: Tensor)-> Tensor:
+        r"""Drift function, f(x,t), of the SDE described by dx = f(x,t)dt + g(x,t)dW.
 
-    def drift_fn(self, input, t):
+        Args:
+            input: Original data, x0.
+            t: SDE time variable in [0,1].
+
+        Raises:
+            NotImplementedError: This method is implemented in each individual SDE classes.
+        """
+        raise NotImplementedError
+    
+    def diffusion_fn(self, input: Tensor, t: Tensor) -> Tensor:
+        r"""Diffusion function, g(x,t), of the SDE described by dx = f(x,t)dt + g(x,t)dW.
+
+        Args:
+            input: Original data, x0.
+            t: SDE time variable in [0,1].
+
+        Raises:
+            NotImplementedError: This method is implemented in each individual SDE classes.
+        """
         raise NotImplementedError
 
     def forward(self, input: Tensor, condition: Tensor, times: Tensor) -> Tensor:
-        # Expand times if it's a scalar.        
+        r"""Forward pass of the score estimator network to compute the conditional score at a given time.
+
+        Args:
+            input: Original data, x0.
+            condition: Conditioning variable.
+            times: SDE time variable in [0,1].
+        
+        Returns:
+            Score (gradient of the density) at a given time, matches input shape.
+        """
+        # Expand times if it's a scalar.
         if times.ndim == 1:
             times = times.expand(input.shape[0])            
 
@@ -57,6 +135,7 @@ class ScoreEstimator(VectorFieldEstimator):
         if times.shape.numel() == 1:
             times = torch.repeat_interleave(times[None], input.shape[0], dim=0)
             times = times.reshape((input.shape[0],))
+
         input_shape = input.shape
         input = input.reshape((-1, input.shape[-1]))
         condition = condition.reshape(-1, condition.shape[-1])
@@ -68,8 +147,20 @@ class ScoreEstimator(VectorFieldEstimator):
         score =  eps_pred / std
         return score.reshape(input_shape)
     
-    def loss(self, input: Tensor, condition: Tensor) -> Tensor:
-        """Denoising score matching loss (Song et al., ICLR 2021)."""
+    def loss(self, input: Tensor, condition: Tensor) -> Tensor:        
+        r"""Defines the denoising score matching loss (e.g., from Song et al., ICLR 2021).
+        A random diffusion time is sampled from [0,1], and the network is trained to predict the
+        score of the true conditional distribution given the noised input, which is equivalent
+        to predicting the (scaled) Gaussian noise added to the input.
+
+        Args:
+            input: Original data, x0.
+            condition: Conditioning variable.
+
+        Returns:
+            MSE between target score and network output, scaled by the weight function.
+        
+        """
         # Sample diffusion times.
         times = torch.clip(torch.rand((input.shape[0],)), self.T_min, 1.0)
 
@@ -86,7 +177,7 @@ class ScoreEstimator(VectorFieldEstimator):
         # Compute true score: -(mean - noised_input) / (std**2).
         score_target = -eps / std
 
-        # Predict score.
+        # Predict score from noised input and diffusion time.
         score_pred = self.forward(input_noised, condition, times)
 
         # Compute weights over time.
@@ -97,15 +188,19 @@ class ScoreEstimator(VectorFieldEstimator):
 
         return weights*loss
 
-    def _set_weight_fn(self, weight_fn):
-        """Get the weight function."""
+    def _set_weight_fn(self, weight_fn: Union[str, Callable]):
+        """Set the weight function.
+
+        Args:
+            weight_fn: Function to compute the weights over time. Can be one of the following:
+                - "identity": constant weights (1.),
+                - "max_likelihood": weights proportional to the diffusion function, or
+                - a custom function that returns a Callable.        
+        """
         if weight_fn == "identity":
             self.weight_fn = lambda t: 1
         elif weight_fn == "max_likelihood":
-            self.weight_fn = lambda t: self.diffusion_fn(torch.ones((1,)),t)**2
-        elif weight_fn == "variance":
-            # From Song & Ermon, NeurIPS 2019.
-            raise NotImplementedError
+            self.weight_fn = lambda t: self.diffusion_fn(torch.ones((1,)),t)**2        
         elif callable(weight_fn):
             self.weight_fn = weight_fn
         else:
@@ -114,7 +209,6 @@ class ScoreEstimator(VectorFieldEstimator):
 
 class VPScoreEstimator(ScoreEstimator):
     """Class for score estimators with variance preserving SDEs (i.e., DDPM)."""
-
     def __init__(
         self,
         net: nn.Module,
@@ -127,30 +221,70 @@ class VPScoreEstimator(ScoreEstimator):
         self.beta_max = beta_max
         super().__init__(net, condition_shape, weight_fn=weight_fn)
 
-    def mean_t_fn(self, times):
+    def mean_t_fn(self, times: Tensor) -> Tensor:
+        """Conditional mean function for variance preserving SDEs.
+        Args:
+            times: SDE time variable in [0,1].
+
+        Returns:
+            Conditional mean at a given time.
+        """
         a = torch.exp(
                 -0.25 * times**2.0 * (self.beta_max - self.beta_min)
                 - 0.5 * times * self.beta_min
             )
         return a.unsqueeze(-1)
     
-    def std_fn(self, times):
+    def std_fn(self, times: Tensor) -> Tensor:
+        """Standard deviation function for variance preserving SDEs.
+        Args:
+            times: SDE time variable in [0,1].
+
+        Returns:
+            Standard deviation at a given time.
+        """
         std =  1.0 - torch.exp(
             -0.5 * times**2.0 * (self.beta_max - self.beta_min)
             - times * self.beta_min
         )
         return torch.sqrt(std.unsqueeze(-1))
 
-    def _beta_schedule(self, times):
+    def _beta_schedule(self, times: Tensor) -> Tensor:
+        """Linear beta schedule for mean scaling in variance preserving SDEs.
+
+        Args:
+            times: SDE time variable in [0,1].
+
+        Returns:
+            Beta schedule at a given time.
+        """
         return self.beta_min + (self.beta_max - self.beta_min) * times
 
-    def drift_fn(self, input, t):
+    def drift_fn(self, input: Tensor, t: Tensor) -> Tensor:
+        """Drift function for variance preserving SDEs.
+        
+        Args:
+            input: Original data, x0.
+            t: SDE time variable in [0,1].
+
+        Returns:
+            Drift function at a given time.
+        """
         phi = -0.5 * self._beta_schedule(t)
         while len(phi.shape) < len(input.shape):
             phi = phi.unsqueeze(-1)
         return phi * input
 
-    def diffusion_fn(self, input, t):
+    def diffusion_fn(self, input: Tensor, t: Tensor) -> Tensor:
+        """Diffusion function for variance preserving SDEs.
+        
+        Args:
+            input: Original data, x0.
+            t: SDE time variable in [0,1].
+
+        Returns:
+            Drift function at a given time.
+        """
         g = torch.sqrt(
             self._beta_schedule(t)
         )
@@ -161,7 +295,6 @@ class VPScoreEstimator(ScoreEstimator):
 
 class subVPScoreEstimator(ScoreEstimator):
     """Class for score estimators with sub-variance preserving SDEs."""
-
     def __init__(
         self,
         net: nn.Module,
@@ -174,25 +307,56 @@ class subVPScoreEstimator(ScoreEstimator):
         self.beta_max = beta_max
         super().__init__(net, condition_shape, weight_fn=weight_fn)
 
-    def mean_t_fn(self, times):
+    def mean_t_fn(self, times: Tensor) -> Tensor:
+        """Conditional mean function for sub-variance preserving SDEs.
+        Args:
+            times: SDE time variable in [0,1].
+
+        Returns:
+            Conditional mean at a given time.
+        """
         a = torch.exp(
                 -0.25 * times**2.0 * (self.beta_max - self.beta_min)
                 - 0.5 * times * self.beta_min
         )                        
         return a.unsqueeze(-1)
 
-    def std_fn(self, times):        
+    def std_fn(self, times: Tensor) -> Tensor:   
+        """Standard deviation function for variance preserving SDEs.
+        Args:
+            times: SDE time variable in [0,1].
+
+        Returns:
+            Standard deviation at a given time.
+        """     
         std = 1.0 - torch.exp(
                 -0.5 * times**2.0 * (self.beta_max - self.beta_min)
                 - times * self.beta_min
             )        
         return std.unsqueeze(-1)
 
-    def _beta_schedule(self, times):
+    def _beta_schedule(self, times: Tensor) -> Tensor:
+        """Linear beta schedule for mean scaling in sub-variance preserving SDEs.
+        (Same as for variance preserving SDEs.)
+
+        Args:
+            times: SDE time variable in [0,1].
+
+        Returns:
+            Beta schedule at a given time.
+        """
         return self.beta_min + (self.beta_max - self.beta_min) * times
 
-    def drift_fn(self, input, t):
+    def drift_fn(self, input: Tensor, t:Tensor) -> Tensor:
+        """Drift function for sub-variance preserving SDEs.
         
+        Args:
+            input: Original data, x0.
+            t: SDE time variable in [0,1].
+
+        Returns:
+            Drift function at a given time.
+        """
         phi = -0.5 * self._beta_schedule(t) 
         
         while len(phi.shape) < len(input.shape):
@@ -200,7 +364,16 @@ class subVPScoreEstimator(ScoreEstimator):
         
         return phi * input
 
-    def diffusion_fn(self, input, t):
+    def diffusion_fn(self, input: Tensor, t: Tensor) -> Tensor:
+        """Diffusion function for sub-variance preserving SDEs.
+        
+        Args:
+            input: Original data, x0.
+            t: SDE time variable in [0,1].
+
+        Returns:
+            Diffusion function at a given time.
+        """
         g = torch.sqrt(
             self._beta_schedule(t)
             * (-torch.exp(-2 * self.beta_min * t - (self.beta_max - self.beta_min) * t**2)))
@@ -210,11 +383,9 @@ class subVPScoreEstimator(ScoreEstimator):
         
         return g
         
-        
-
 
 class VEScoreEstimator(ScoreEstimator):
-    """Class for score estimators with variance exploding SDEs (i.e., SMLD)."""
+    """Class for score estimators with variance exploding SDEs (i.e., NCSN / SMLD)."""
 
     def __init__(
         self,
@@ -228,20 +399,62 @@ class VEScoreEstimator(ScoreEstimator):
         self.sigma_max = sigma_max
         super().__init__(net, condition_shape, weight_fn=weight_fn)
 
-    def mean_t_fn(self, times):
-        return 1.0
+    def mean_t_fn(self, times: Tensor) -> Tensor:
+        """Conditional mean function for variance exploding SDEs, which is always 1.
+        
+        Args:
+            times: SDE time variable in [0,1].
 
-    def std_fn(self, times):
+        Returns:
+            Conditional mean at a given time.
+        """
+        return torch.tensor([1.0])
+
+    def std_fn(self, times: Tensor) -> Tensor:
+        """Standard deviation function for variance exploding SDEs.
+        
+        Args:
+            times: SDE time variable in [0,1].
+        
+        Returns:
+            Standard deviation at a given time.
+        """
         std = self.sigma_min * (self.sigma_max / self.sigma_min) ** times
         return std.unsqueeze(-1)
 
-    def _sigma_schedule(self, times):
+    def _sigma_schedule(self, times: Tensor) -> Tensor:
+        """Geometric sigma schedule for variance exploding SDEs.
+
+        Args:
+            times: SDE time variable in [0,1].
+
+        Returns:
+            Sigma schedule at a given time.
+        """
         return self.sigma_min * (self.sigma_max / self.sigma_min) ** times
 
-    def drift_fn(self, input, t):
+    def drift_fn(self, input: Tensor, t: Tensor)-> Tensor:
+        """Drift function for variance exploding SDEs.
+        
+        Args:
+            input: Original data, x0.
+            t: SDE time variable in [0,1].
+
+        Returns:
+            Drift function at a given time.
+        """
         return torch.tensor([0.0])
 
-    def diffusion_fn(self, t):
+    def diffusion_fn(self, input:Tensor, t: Tensor)-> Tensor:
+        """Diffusion function for variance exploding SDEs.
+        
+        Args:
+            input: Original data, x0.
+            t: SDE time variable in [0,1].
+
+        Returns:
+            Diffusion function at a given time.
+        """
         g = self._sigma_schedule(t) * torch.sqrt(2 * torch.log(self.sigma_max / self.sigma_min))
         
         while len(g.shape) < len(input.shape):

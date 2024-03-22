@@ -31,6 +31,15 @@ class VectorFieldEstimator(nn.Module):
         self._condition_shape = condition_shape
 
     def forward(self, input: Tensor, condition: Tensor, **kwargs) -> Tensor:
+        """Forward pass of the score estimator.
+
+        Args:
+            input: variable whose distribution is estimated.
+            condition: Conditioning variable.
+
+        Raises:
+            NotImplementedError: This method should be implemented by sub-classes.
+        """
         raise NotImplementedError
 
     def loss(self, input: Tensor, condition: Tensor, **kwargs) -> Tensor:

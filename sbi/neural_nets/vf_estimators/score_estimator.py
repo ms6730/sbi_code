@@ -1,5 +1,5 @@
 from typing import Union, Callable
-
+import math
 import torch
 from torch import Tensor, nn
 from sbi.neural_nets.vf_estimators.base import VectorFieldEstimator
@@ -455,7 +455,7 @@ class VEScoreEstimator(ScoreEstimator):
         Returns:
             Diffusion function at a given time.
         """
-        g = self._sigma_schedule(times) * torch.sqrt(2 * torch.log(torch.Tensor(self.sigma_max / self.sigma_min)))
+        g = self._sigma_schedule(times) * math.sqrt(2 * math.log(self.sigma_max / self.sigma_min))
         
         while len(g.shape) < len(input.shape):
             g = g.unsqueeze(-1)

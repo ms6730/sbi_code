@@ -2,7 +2,7 @@
 # under the Affero General Public License v3, see <https://www.gnu.org/licenses/>.
 import time
 from copy import deepcopy
-from typing import Any, Callable, Dict, Optional, Union
+from typing import Any, Callable, Optional, Union
 from warnings import warn
 
 import torch
@@ -46,7 +46,7 @@ class NSPE(NeuralInference):
         logging_level: Union[int, str] = "WARNING",
         summary_writer: Optional[SummaryWriter] = None,
         show_progress_bars: bool = True,
-        **kwargs: Dict[str, Any],
+        **kwargs,
     ):
         """Base class for Sequential Neural Posterior Estimation methods.
 
@@ -465,12 +465,17 @@ class NSPE(NeuralInference):
             # If internal net is used device is defined.
             # device = self._device
         else:
+            assert score_estimator is not None, (
+                "You did not pass a score estimator. You have to pass the score "
+                "estimator either at initialization `inference = SNPE(score_estimator)`"
+                "or to `.build_posterior(score_estimator=score_estimator)`."
+            )
             score_estimator = score_estimator
             # Otherwise, infer it from the device of the net parameters.
         # device = next(score_estimator.parameters()).device.type
 
         potential_fn, theta_transform = score_estimator_based_potential(
-            score_estimator=score_estimator,
+            score_estimator=score_estimator,  # type: ignore
             prior=prior,
             x_o=None,
         )
@@ -478,7 +483,11 @@ class NSPE(NeuralInference):
         if sample_with == "ode":
             raise NotImplementedError("ODE-based sampling is not yet implemented.")
         elif sample_with == "sde":
-            posterior = ScorePosterior(score_estimator, prior, x_shape=self._x_shape)
+            posterior = ScorePosterior(
+                score_estimator,
+                prior,
+                x_shape=self._x_shape,  # type: ignore
+            )
 
         self._posterior = posterior
         # Store models at end of each round.

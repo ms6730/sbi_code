@@ -139,7 +139,7 @@ class ScorePosterior(NeuralPosterior):
         )
         ts = torch.linspace(1.0, 1e-3, 1000)
         samples = score_based_sampler(
-            score_based_potential=self.potential_fn,
+            score_based_potential=self.potential_fn,  # type: ignore
             proposal=proposal,
             drift=self.score_estimator.drift_fn,
             diffusion=self.score_estimator.diffusion_fn,

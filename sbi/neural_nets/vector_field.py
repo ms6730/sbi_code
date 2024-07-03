@@ -13,7 +13,7 @@ from sbi.neural_nets.vf_estimators.score_estimator import (
     subVPScoreEstimator,
 )
 from sbi.utils.sbiutils import standardizing_net, z_score_parser
-from sbi.utils.user_input_checks import check_data_device, check_embedding_net_device
+from sbi.utils.user_input_checks import check_data_device
 
 
 class EmbedInputs(nn.Module):
@@ -167,8 +167,8 @@ def build_score_estimator(
 
     """Builds score estimator for score-based generative models."""
     check_data_device(batch_x, batch_y)
-    check_embedding_net_device(embedding_net=embedding_net_x, datum=batch_y)
-    check_embedding_net_device(embedding_net=embedding_net_y, datum=batch_y)
+    # check_embedding_net_device(embedding_net=embedding_net_x, datum=batch_y)
+    # check_embedding_net_device(embedding_net=embedding_net_y, datum=batch_y)
 
     input_layer = build_input_layer(
         batch_x,

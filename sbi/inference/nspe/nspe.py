@@ -484,7 +484,7 @@ class NSPE(NeuralInference):
             raise NotImplementedError("ODE-based sampling is not yet implemented.")
         elif sample_with == "sde":
             posterior = ScorePosterior(
-                score_estimator,
+                score_estimator,  # type: ignore
                 prior,
                 x_shape=self._x_shape,  # type: ignore
             )

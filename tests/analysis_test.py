@@ -1,3 +1,6 @@
+# This file is part of sbi, a toolkit for simulation-based inference. sbi is licensed
+# under the Apache License Version 2.0, see <https://www.apache.org/licenses/>
+
 import pytest
 import torch
 
@@ -18,16 +21,17 @@ def test_analysis_modules(device: str) -> None:
     Args:
         device: Which device to run the inference on.
     """
+
     num_dim = 3
     device = process_device(device)
     prior = BoxUniform(
         low=-2 * torch.ones(num_dim), high=2 * torch.ones(num_dim), device=device
     )
 
-    def simulator(parameter_set):
-        return 1.0 + parameter_set + torch.randn(parameter_set.shape) * 0.1
+    def simulator(theta):
+        return 1.0 + theta + torch.randn(theta.shape, device=theta.device) * 0.1
 
-    theta = prior.sample((300,)).to("cpu")
+    theta = prior.sample((300,)).to(device)
     x = simulator(theta)
 
     inf = SNPE(prior=prior, device=device)

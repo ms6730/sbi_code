@@ -16,11 +16,42 @@ from sbi.neural_nets.flow import (
     build_maf,
     build_maf_rqs,
     build_nsf,
+    build_zuko_bpf,
+    build_zuko_gf,
     build_zuko_maf,
+    build_zuko_naf,
+    build_zuko_ncsf,
+    build_zuko_nice,
+    build_zuko_nsf,
+    build_zuko_sospf,
+    build_zuko_unaf,
 )
 from sbi.neural_nets.mdn import build_mdn
 from sbi.neural_nets.mnle import build_mnle
 from sbi.neural_nets.vector_field import build_score_estimator
+from sbi.utils.nn_utils import check_net_device
+
+model_builders = {
+    "mdn": build_mdn,
+    "made": build_made,
+    "maf": build_maf,
+    "maf_rqs": build_maf_rqs,
+    "nsf": build_nsf,
+    "mnle": build_mnle,
+    "zuko_nice": build_zuko_nice,
+    "zuko_maf": build_zuko_maf,
+    "zuko_nsf": build_zuko_nsf,
+    "zuko_ncsf": build_zuko_ncsf,
+    "zuko_sospf": build_zuko_sospf,
+    "zuko_naf": build_zuko_naf,
+    "zuko_unaf": build_zuko_unaf,
+    "zuko_gf": build_zuko_gf,
+    "zuko_bpf": build_zuko_bpf,
+}
+
+embedding_net_warn_msg = """The passed embedding net will be moved to cpu for
+                        constructing the net building function."""
+
 
 def classifier_nn(
     model: str,
@@ -72,8 +103,8 @@ def classifier_nn(
                 z_score_theta,
                 z_score_x,
                 hidden_features,
-                embedding_net_theta,
-                embedding_net_x,
+                check_net_device(embedding_net_theta, "cpu", embedding_net_warn_msg),
+                check_net_device(embedding_net_x, "cpu", embedding_net_warn_msg),
             ),
         ),
         **kwargs,
@@ -154,7 +185,7 @@ def likelihood_nn(
                 hidden_features,
                 num_transforms,
                 num_bins,
-                embedding_net,
+                check_net_device(embedding_net, "cpu", embedding_net_warn_msg),
                 num_components,
             ),
         ),
@@ -162,22 +193,10 @@ def likelihood_nn(
     )
 
     def build_fn(batch_theta, batch_x):
-        if model == "mdn":
-            return build_mdn(batch_x=batch_x, batch_y=batch_theta, **kwargs)
-        elif model == "made":
-            return build_made(batch_x=batch_x, batch_y=batch_theta, **kwargs)
-        elif model == "maf":
-            return build_maf(batch_x=batch_x, batch_y=batch_theta, **kwargs)
-        elif model == "maf_rqs":
-            return build_maf_rqs(batch_x=batch_x, batch_y=batch_theta, **kwargs)
-        elif model == "nsf":
-            return build_nsf(batch_x=batch_x, batch_y=batch_theta, **kwargs)
-        elif model == "mnle":
-            return build_mnle(batch_x=batch_x, batch_y=batch_theta, **kwargs)
-        elif model == "zuko_maf":
-            return build_zuko_maf(batch_x=batch_x, batch_y=batch_theta, **kwargs)
-        else:
-            raise NotImplementedError
+        if model not in model_builders:
+            raise NotImplementedError(f"Model {model} in not implemented")
+
+        return model_builders[model](batch_x=batch_x, batch_y=batch_theta, **kwargs)
 
     return build_fn
 
@@ -242,7 +261,7 @@ def posterior_nn(
                 hidden_features,
                 num_transforms,
                 num_bins,
-                embedding_net,
+                check_net_device(embedding_net, "cpu", embedding_net_warn_msg),
                 num_components,
             ),
         ),
@@ -265,20 +284,13 @@ def posterior_nn(
         )
 
     def build_fn(batch_theta, batch_x):
-        if model == "mdn":
-            return build_mdn(batch_x=batch_theta, batch_y=batch_x, **kwargs)
-        elif model == "made":
-            return build_made(batch_x=batch_theta, batch_y=batch_x, **kwargs)
-        elif model == "maf":
-            return build_maf(batch_x=batch_theta, batch_y=batch_x, **kwargs)
-        elif model == "maf_rqs":
-            return build_maf_rqs(batch_x=batch_theta, batch_y=batch_x, **kwargs)
-        elif model == "nsf":
-            return build_nsf(batch_x=batch_theta, batch_y=batch_x, **kwargs)
-        elif model == "zuko_maf":
-            return build_zuko_maf(batch_x=batch_theta, batch_y=batch_x, **kwargs)
-        else:
-            raise NotImplementedError
+        if model not in model_builders:
+            raise NotImplementedError(f"Model {model} in not implemented")
+
+        # The naming might be a bit confusing.
+        # batch_x are the latent variables, batch_y the conditioned variables.
+        # batch_theta are the parameters and batch_x the observable variables.
+        return model_builders[model](batch_x=batch_theta, batch_y=batch_x, **kwargs)
 
     if model == "mdn_snpe_a":
         if num_components != 10:
@@ -290,7 +302,7 @@ def posterior_nn(
         kwargs.pop("num_components")
 
     return build_fn_snpe_a if model == "mdn_snpe_a" else build_fn
-    
+
 
 def posterior_score_nn(
     sde_type: str,
@@ -298,11 +310,12 @@ def posterior_score_nn(
     z_score_theta: Optional[str] = "independent",
     z_score_x: Optional[str] = "independent",
     t_embedding_dim: int = 16,
-    hidden_features: int = 50,        
+    hidden_features: int = 50,
     embedding_net: nn.Module = nn.Identity(),
     **kwargs: Any,
 ) -> Callable:
-    """Build util function that builds a ScoreEstimator object for score-based posteriors.
+    """Build util function that builds a ScoreEstimator object for score-based
+    posteriors.
 
     Args:
         sde_type: SDE type used, which defines the mean and std functions. One of:
@@ -314,8 +327,9 @@ def posterior_score_nn(
             - 'mlp': Fully connected feed-forward network.
             - 'resnet': Residual network (NOT IMPLEMENTED).
             -  nn.Module: Custom network
-            Defaults to 'mlp'.                    
-        z_score_theta: Whether to z-score thetas passing into the network, can be one of:
+            Defaults to 'mlp'.
+        z_score_theta: Whether to z-score thetas passing into the network, can be one
+            of:
             - `none`, or None: do not z-score.
             - `independent`: z-score each dimension independently.
             - `structured`: treat dimensions as related, therefore compute mean and std
@@ -323,14 +337,15 @@ def posterior_score_nn(
             sample is, for example, a time series or an image.
         z_score_x: Whether to z-score xs passing into the network, same options as
             z_score_theta.
-        t_embedding_dim: Embedding dimension of diffusion time. Defaults to 16.        
+        t_embedding_dim: Embedding dimension of diffusion time. Defaults to 16.
         hidden_features: Number of hidden units per layer. Defaults to 50.
-        embedding_net: Embedding network for x (conditioning variable). Defaults to nn.Identity().
+        embedding_net: Embedding network for x (conditioning variable). Defaults to
+            nn.Identity().
 
     Returns:
         Constructor function for NSPE.
     """
-    
+
     kwargs = dict(
         zip(
             (
@@ -339,9 +354,8 @@ def posterior_score_nn(
                 "sde_type",
                 "score_net",
                 "t_embedding_dim",
-                "hidden_features",                
+                "hidden_features",
                 "embedding_net_y",
-                
             ),
             (
                 z_score_theta,
@@ -349,12 +363,13 @@ def posterior_score_nn(
                 sde_type,
                 score_net_type,
                 t_embedding_dim,
-                hidden_features,                
+                hidden_features,
                 embedding_net,
             ),
         ),
         **kwargs,
     )
+
     def build_fn(batch_theta, batch_x):
         """Build function wrapper for the build_score_estimator function that
         is required for the score posterior class.
@@ -367,5 +382,5 @@ def posterior_score_nn(
             Callable: a ScoreEstimator object.
         """
         return build_score_estimator(batch_x=batch_theta, batch_y=batch_x, **kwargs)
-        
+
     return build_fn

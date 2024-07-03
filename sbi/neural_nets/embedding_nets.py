@@ -1,11 +1,11 @@
 # This file is part of sbi, a toolkit for simulation-based inference. sbi is licensed
-# under the Affero General Public License v3, see <https://www.gnu.org/licenses/>.
+# under the Apache License Version 2.0, see <https://www.apache.org/licenses/>
 
 from typing import List, Optional, Tuple, Union
 
 import torch
-from torch import Tensor, nn
 from numpy import pi
+from torch import Tensor, nn
 
 
 class FCEmbedding(nn.Module):
@@ -313,13 +313,14 @@ class PermutationInvariantEmbedding(nn.Module):
 
 
 class GaussianFourierTimeEmbedding(nn.Module):
-  """Gaussian random features for encoding time steps."""  
-  def __init__(self, embed_dim=256, scale=30.):
-    super().__init__()
-    # Randomly sample weights during initialization. These weights are fixed 
-    # during optimization and are not trainable.
-    self.W = nn.Parameter(torch.randn(embed_dim // 2) * scale, requires_grad=False)
-  
-  def forward(self, times):    
-    times_proj = times[:, None] * self.W[None, :] * 2 * pi
-    return torch.cat([torch.sin(times_proj), torch.cos(times_proj)], dim=-1)
+    """Gaussian random features for encoding time steps."""
+
+    def __init__(self, embed_dim=256, scale=30.0):
+        super().__init__()
+        # Randomly sample weights during initialization. These weights are fixed
+        # during optimization and are not trainable.
+        self.W = nn.Parameter(torch.randn(embed_dim // 2) * scale, requires_grad=False)
+
+    def forward(self, times):
+        times_proj = times[:, None] * self.W[None, :] * 2 * pi
+        return torch.cat([torch.sin(times_proj), torch.cos(times_proj)], dim=-1)

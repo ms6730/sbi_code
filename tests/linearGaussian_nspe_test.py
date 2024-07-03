@@ -1,7 +1,5 @@
 import pytest
-
-import torch
-from torch import zeros, ones, eye 
+from torch import eye, ones, zeros
 from torch.distributions import MultivariateNormal
 
 from sbi import analysis as analysis
@@ -9,15 +7,16 @@ from sbi import utils as utils
 from sbi.inference.base import simulate_for_sbi
 from sbi.inference.nspe.nspe import NSPE
 from sbi.simulators import linear_gaussian
-from sbi.simulators.linear_gaussian import samples_true_posterior_linear_gaussian_uniform_prior, true_posterior_linear_gaussian_mvn_prior
+from sbi.simulators.linear_gaussian import (
+    samples_true_posterior_linear_gaussian_uniform_prior,
+    true_posterior_linear_gaussian_mvn_prior,
+)
 from sbi.utils.user_input_checks import prepare_for_sbi
 
 from .test_utils import (
     check_c2st,
-    get_dkl_gaussian_prior,
-    get_normalization_uniform_prior,
-    get_prob_outside_uniform_prior,
 )
+
 
 @pytest.mark.slow
 @pytest.mark.parametrize("sde_type", ["vp", "ve", "subvp"])
@@ -78,7 +77,8 @@ def test_c2st_snpe_on_linearGaussian(sde_type, num_dim: int, prior_str: str):
 
     # Checks for log_prob()
     # if prior_str == "gaussian":
-    #     # For the Gaussian prior, we compute the KLd between ground truth and posterior.
+    #     # For the Gaussian prior, we compute the KLd between ground truth and
+    # posterior.
     #     dkl = get_dkl_gaussian_prior(
     #         posterior,
     #         x_o[0],
@@ -119,6 +119,6 @@ def test_c2st_snpe_on_linearGaussian(sde_type, num_dim: int, prior_str: str):
     #         acceptance_prob * 0.99
     #         < posterior_likelihood_unnorm / posterior_likelihood_norm
     #         < acceptance_prob * 1.01
-    #     ), "Normalizing the posterior density using the acceptance probability failed."
+    #     ), "Normalizing the posterior density using the acceptance probability failed"
 
     #     assert ((map_ - ones(num_dim)) ** 2).sum() < 0.5

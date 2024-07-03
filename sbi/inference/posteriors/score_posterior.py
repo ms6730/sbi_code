@@ -3,28 +3,28 @@
 from typing import Optional, Union
 
 import torch
-import torch.nn as nn
 from torch import Tensor, log
 from torch.distributions import Distribution
 
 from sbi.inference.posteriors.base_posterior import NeuralPosterior
-from sbi.inference.potentials.score_based_potential import score_estimator_based_potential
-from sbi.samplers.rejection.rejection import accept_reject_sample
+from sbi.inference.potentials.score_based_potential import (
+    score_estimator_based_potential,
+)
+from sbi.neural_nets.vf_estimators.score_estimator import ScoreEstimator
 from sbi.samplers.score.score import score_based_sampler
 from sbi.sbi_types import Shape
 from sbi.utils import check_prior, within_support
 from sbi.utils.torchutils import ensure_theta_batched
 
-from sbi.neural_nets.vf_estimators.score_estimator import ScoreEstimator
-from sbi.neural_nets.vf_estimators.score_based_distribution_deprecated import ScoreDistribution
-
 
 class ScorePosterior(NeuralPosterior):
     r"""Posterior $p(\theta|x_o)$ with `log_prob()` and `sample()` methods, only
     applicable to SNPE.<br/><br/>
-    Class to obtain a posterior for a diffusion model built with a score_estimator (a neural network to approximate the score).
+    Class to obtain a posterior for a diffusion model built with a score_estimator
+        (a neural network to approximate the score).
     However, for bounded priors, we can have leakage: it puts non-zero
-    mass in regions where the prior is zero. The `ScoreEstimatorPosterior` class also handles these cases.
+    mass in regions where the prior is zero. The `ScoreEstimatorPosterior` class also
+        handles these cases.
     Specifically, this class offers the following functionality:<br/>
     - correct the calculation of the log probability such that it compensates for the
       leakage.<br/> ???
@@ -55,7 +55,7 @@ class ScorePosterior(NeuralPosterior):
                 during MAP optimization. When False, an identity transform will be
                 returned for `theta_transform`.
         """
-       
+
         check_prior(prior)
         potential_fn, theta_transform = score_estimator_based_potential(
             score_estimator=score_estimator,
@@ -63,7 +63,6 @@ class ScorePosterior(NeuralPosterior):
             x_o=None,
             x_o_shape=x_shape,
         )
-
 
         super().__init__(
             potential_fn=potential_fn,
@@ -75,14 +74,11 @@ class ScorePosterior(NeuralPosterior):
         self.prior = prior
         self.score_estimator = score_estimator
 
-
-
-
         self.max_sampling_batch_size = max_sampling_batch_size
 
-        self._purpose = """It samples from the diffusion model given the score_estimator and rejects samples that
+        self._purpose = """It samples from the diffusion model given the \
+            score_estimator and rejects samples that
             lie outside of the prior bounds."""
-
 
     def sample(
         self,
@@ -104,11 +100,12 @@ class ScorePosterior(NeuralPosterior):
         """
 
         num_samples = torch.Size(sample_shape).numel()
-        condition_shape = self.score_estimator._condition_shape
+        # condition_shape = self.score_estimator._condition_shape
 
         x = self._x_else_default_x(x)
-        self.potential_fn.set_x(x.unsqueeze(0)) # TODO Fix when new batching rules are in
-        
+        self.potential_fn.set_x(
+            x.unsqueeze(0)
+        )  # TODO Fix when new batching rules are in
 
         # try:
         #     x = x.reshape(*condition_shape)
@@ -132,23 +129,25 @@ class ScorePosterior(NeuralPosterior):
                 f"`.build_posterior(sample_with={sample_with}).`"
             )
 
-        #proposal = ScoreDistribution(score_estimator=self.score_estimator, condition = x, sample_with = 'sde', event_shape=self.prior.event_shape)
-        
+        # proposal = ScoreDistribution(score_estimator=self.score_estimator,
+        # condition = x, sample_with = 'sde', event_shape=self.prior.event_shape)
+
         num_samples = torch.Size(sample_shape).numel()
         theta_dim = self.prior.event_shape.numel()
-        proposal = torch.distributions.Normal(torch.zeros(theta_dim), torch.ones(theta_dim))
-        ts = torch.linspace(1.,1e-3, 1000)
+        proposal = torch.distributions.Normal(
+            torch.zeros(theta_dim), torch.ones(theta_dim)
+        )
+        ts = torch.linspace(1.0, 1e-3, 1000)
         samples = score_based_sampler(
             score_based_potential=self.potential_fn,
             proposal=proposal,
-            drift = self.score_estimator.drift_fn,
-            diffusion = self.score_estimator.diffusion_fn,
-            ts = ts,
-            dim_theta = theta_dim,
+            drift=self.score_estimator.drift_fn,
+            diffusion=self.score_estimator.diffusion_fn,
+            ts=ts,
+            dim_theta=theta_dim,
             num_samples=num_samples,
         )
-        
-        
+
         # samples = accept_reject_sample(
         #     proposal=proposal,  # type Union[nn.module, Distribution, NeuralPosterior]
         #     accept_reject_fn=lambda theta: within_support(self.prior, theta),
@@ -233,6 +232,7 @@ class ScorePosterior(NeuralPosterior):
             )
 
             return masked_log_prob - log_factor
+
     '''
     @torch.no_grad()
     def leakage_correction(
@@ -288,7 +288,7 @@ class ScorePosterior(NeuralPosterior):
 
         return self._leakage_density_correction_factor  # type: ignore
     '''
-    
+
     def map(
         self,
         x: Optional[Tensor] = None,
@@ -356,4 +356,3 @@ class ScorePosterior(NeuralPosterior):
             show_progress_bars=show_progress_bars,
             force_update=force_update,
         )
-

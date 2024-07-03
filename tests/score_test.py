@@ -9,7 +9,6 @@ from torch.distributions.multivariate_normal import MultivariateNormal
 
 from sbi.neural_nets.vf_estimators.score_estimator import (
     VEScoreEstimator,
-    VPScoreEstimator,
 )
 
 
@@ -35,7 +34,8 @@ def get_vpdiff_uniform_score(a, b):
         sigma_t = 1.0 - alpha_t
 
         # N(theta_t|mu_t, sigma^2_t) = N(mu_t|theta_t, sigma^2_t)
-        # int N(theta_t|mu_t, sigma^2_t) dtheta = int N(mu_t|theta_t, sigma^2_t) dmu_t / scaling_t
+        # int N(theta_t|mu_t, sigma^2_t) dtheta = int N(mu_t|theta_t, sigma^2_t) dmu_t /
+        # scaling_t
         # theta in [a, b] -> mu_t in [a, b] * scaling_t
         f = (
             norm.cdf((b * scaling_t - theta) / sigma_t)
@@ -175,8 +175,10 @@ class Gaussian_MixtGaussian_mD:
         )
 
     def diffused_posterior_mean_std(self, x_obs, mean_t, std_t):
-        # This will only support one observation at a time, and also only one diffusion time
-        # This is because the score computation is computed based on a torch distribution
+        # This will only support one observation at a time, and also only one diffusion
+        # time
+        # This is because the score computation is computed based on a torch
+        # distribution
         posterior_0 = self.true_posterior(x_obs)
         cov = posterior_0.component_distribution.covariance_matrix
         return torch.distributions.MixtureSameFamily(
@@ -234,7 +236,7 @@ if __name__ == "__main__":
     test = MockVPScoreEstimator()
 
     different_times = []
-    for jdx, j in enumerate(torch.linspace(0.01, 0.9, 100)):
+    for _, j in enumerate(torch.linspace(0.01, 0.9, 100)):
         hmm = test.forward(
             torch.linspace(-5, 5, 100).unsqueeze(1),
             torch.tensor([0.0]),

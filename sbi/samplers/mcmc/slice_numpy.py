@@ -1,5 +1,5 @@
 # This file is part of sbi, a toolkit for simulation-based inference. sbi is licensed
-# under the Affero General Public License v3, see <https://www.gnu.org/licenses/>.
+# under the Apache License Version 2.0, see <https://www.apache.org/licenses/>
 
 import os
 import sys
@@ -10,6 +10,8 @@ import numpy as np
 import torch
 from joblib import Parallel, delayed
 from matplotlib import pyplot as plt
+from matplotlib.axes import Axes
+from matplotlib.figure import FigureBase
 from tqdm.auto import tqdm, trange
 
 from sbi.simulators.simutils import tqdm_joblib
@@ -20,20 +22,20 @@ class MCMCSampler:
     Superclass for MCMC samplers.
     """
 
-    def __init__(self, x, lp_f: Callable, thin: Optional[int], verbose: bool = False):
+    def __init__(self, x, lp_f: Callable, thin: int, verbose: bool = False):
         """
 
         Args:
             x: initial state
             lp_f: Function that returns the log prob.
-            thin: amount of thinning; if None, no thinning.
+            thin: Thinning (subsampling) factor, default 1 (no thinning).
             verbose: Whether to show progress bars (False).
         """
 
         self.x = np.array(x, dtype=float)
         self.lp_f = lp_f
         self.L = lp_f(self.x)
-        self.thin = 1 if thin is None else thin
+        self.thin = thin
         self.n_dims = self.x.size if self.x.ndim == 1 else self.x.shape[1]
         self.verbose = verbose
 
@@ -59,7 +61,7 @@ class SliceSampler(MCMCSampler):
         lp_f,
         max_width=float("inf"),
         init_width: Union[float, np.ndarray] = 0.01,
-        thin=None,
+        thin=1,
         tuning: int = 50,
         verbose: bool = False,
     ):
@@ -134,8 +136,8 @@ class SliceSampler(MCMCSampler):
 
         # show trace plot
         if show_info:
-            fig: plt.FigureBase
-            ax: plt.Axes
+            fig: FigureBase
+            ax: Axes
             fig, ax = plt.subplots(1, 1)  # pyright: ignore[reportAssignmentType]
             ax.plot(L_trace)
             ax.set_ylabel("log probability")
@@ -220,7 +222,7 @@ class SliceSamplerSerial:
         log_prob_fn: Callable,
         init_params: np.ndarray,
         num_chains: int = 1,
-        thin: Optional[int] = None,
+        thin: int = 1,
         tuning: int = 50,
         verbose: bool = True,
         init_width: Union[float, np.ndarray] = 0.01,
@@ -235,7 +237,7 @@ class SliceSamplerSerial:
             log_prob_fn: Log prob function.
             init_params: Initial parameters.
             num_chains: Number of MCMC chains to run in parallel
-            thin: amount of thinning; if None, no thinning.
+            thin: Thinning (subsampling) factor, default 1 (no thinning).
             tuning: Number of tuning steps for brackets.
             verbose: Show/hide additional info such as progress bars.
             init_width: Inital width of brackets.
@@ -354,7 +356,7 @@ class SliceSamplerVectorized:
         log_prob_fn: Callable,
         init_params: np.ndarray,
         num_chains: int = 1,
-        thin: Optional[int] = None,
+        thin: int = 1,
         tuning: int = 50,
         verbose: bool = True,
         init_width: Union[float, np.ndarray] = 0.01,
@@ -367,7 +369,7 @@ class SliceSamplerVectorized:
             log_prob_fn: Log prob function.
             init_params: Initial parameters.
             num_chains: Number of MCMC chains to run in parallel
-            thin: amount of thinning; if None, no thinning.
+            thin: Thinning (subsampling) factor, default 1 (no thinning).
             tuning: Number of tuning steps for brackets.
             verbose: Show/hide additional info such as progress bars.
             init_width: Inital width of brackets.
@@ -422,21 +424,23 @@ class SliceSamplerVectorized:
 
         # Init chains
         for c in range(self.num_chains):
-            self.state[c]["x"] = self.x[c, :]
+            self.state[c]["x"] = self.x[c, :]  # current position of chain
 
-            self.state[c]["i"] = 0
-            self.state[c]["order"] = list(range(self.n_dims))
+            self.state[c]["i"] = 0  # current dimension
+            self.state[c]["order"] = list(range(self.n_dims))  # order of dimensions
             self.rng.shuffle(self.state[c]["order"])
-
+            # accepted samples
             self.state[c]["samples"] = np.empty([int(num_samples), int(self.n_dims)])
 
-            self.state[c]["state"] = "BEGIN"
+            self.state[c]["state"] = "BEGIN"  # state of chain
 
-            self.state[c]["width"] = np.full(self.n_dims, self.init_width)
+            self.state[c]["width"] = np.full(
+                self.n_dims, self.init_width
+            )  # bracket width per dimension
 
         if self.verbose:
             pbar = tqdm(
-                range(self.num_chains * num_samples),
+                range(self.num_chains * (num_samples + self.tuning)),
                 desc=f"Running vectorized MCMC with {self.num_chains} chains",
             )
 
@@ -461,7 +465,7 @@ class SliceSamplerVectorized:
                 sc = self.state[c]
 
                 if sc["state"] == "BEGIN":
-                    # position the bracket randomly around the current sample
+                    # position the bracket randomly around the current sample.
                     sc["logu"] = log_probs[c] + np.log(1.0 - self.rng.rand())
                     sc["lx"] = sc["cxi"] - sc["wi"] * self.rng.rand()
                     sc["ux"] = sc["lx"] + sc["wi"]
@@ -477,7 +481,7 @@ class SliceSamplerVectorized:
                         log_probs[c] >= sc["logu"]
                         and sc["cxi"] - sc["lx"] < self.max_width
                     )
-
+                    # decrease lower end of bracket.
                     if outside_lower:
                         sc["lx"] -= sc["wi"]
                         sc["next_param"] = np.concatenate([
@@ -485,7 +489,7 @@ class SliceSamplerVectorized:
                             [sc["lx"]],
                             sc["x"][sc["order"][sc["i"]] + 1 :],
                         ])
-
+                    # lower end calibrated, move to upper end.
                     else:
                         sc["next_param"] = np.concatenate([
                             sc["x"][: sc["order"][sc["i"]]],
@@ -499,7 +503,7 @@ class SliceSamplerVectorized:
                         log_probs[c] >= sc["logu"]
                         and sc["ux"] - sc["cxi"] < self.max_width
                     )
-
+                    # increase upper end of bracket.
                     if outside_upper:
                         sc["ux"] += sc["wi"]
                         sc["next_param"] = np.concatenate([
@@ -508,7 +512,7 @@ class SliceSamplerVectorized:
                             sc["x"][sc["order"][sc["i"]] + 1 :],
                         ])
                     else:
-                        # sample uniformly from bracket
+                        # sample uniformly from bracket.
                         sc["xi"] = (sc["ux"] - sc["lx"]) * self.rng.rand() + sc["lx"]
                         sc["next_param"] = np.concatenate([
                             sc["x"][: sc["order"][sc["i"]]],
@@ -518,7 +522,7 @@ class SliceSamplerVectorized:
                         sc["state"] = "SAMPLE_SLICE"
 
                 elif sc["state"] == "SAMPLE_SLICE":
-                    # if outside slice, reject sample and shrink bracket
+                    # if outside slice, reject sample and shrink bracket.
                     rejected = log_probs[c] < sc["logu"]
 
                     if rejected:
@@ -534,12 +538,12 @@ class SliceSamplerVectorized:
                         ])
 
                     else:
-                        if sc["t"] < num_samples:
+                        if sc["t"] < num_samples + self.tuning:
                             sc["state"] = "BEGIN"
 
                             sc["x"] = sc["next_param"].copy()
-
-                            if sc["t"] <= (self.tuning):
+                            # if tuning, update bracket width.
+                            if sc["t"] < (self.tuning):
                                 i = sc["order"][sc["i"]]
                                 sc["width"][i] += (
                                     (sc["ux"] - sc["lx"]) - sc["width"][i]
@@ -547,10 +551,12 @@ class SliceSamplerVectorized:
 
                             if sc["i"] < len(sc["order"]) - 1:
                                 sc["i"] += 1
-
+                            # save accepted sample and shuffle dimensions.
                             else:
-                                if sc["t"] > self.tuning:
-                                    sc["samples"][sc["t"]] = sc["x"].copy()
+                                if sc["t"] >= self.tuning:
+                                    sc["samples"][sc["t"] - self.tuning] = sc[
+                                        "x"
+                                    ].copy()
 
                                 sc["t"] += 1
 
@@ -560,6 +566,11 @@ class SliceSamplerVectorized:
 
                                 if self.verbose and sc["t"] % 10 == 0:
                                     pbar.update(10)  # type: ignore
+                                elif (
+                                    self.verbose
+                                    and sc["t"] == num_samples + self.tuning
+                                ):
+                                    pbar.update(sc["t"] % 10)  # type: ignore
 
                         else:
                             sc["state"] = "DONE"

@@ -15,15 +15,14 @@ from sbi import utils as utils
 from sbi.inference import NeuralInference, check_if_proposal_has_default_x
 from sbi.inference.posteriors import (
     DirectPosterior,
-    MCMCPosterior,
-    RejectionPosterior,
-    VIPosterior,
 )
 from sbi.inference.posteriors.base_posterior import NeuralPosterior
 from sbi.inference.posteriors.score_posterior import ScorePosterior
-from sbi.inference.potentials.score_based_potential import score_estimator_based_potential
-from sbi.neural_nets.vf_estimators.score_estimator import ScoreEstimator
+from sbi.inference.potentials.score_based_potential import (
+    score_estimator_based_potential,
+)
 from sbi.neural_nets.factory import posterior_score_nn
+from sbi.neural_nets.vf_estimators.score_estimator import ScoreEstimator
 from sbi.utils import (
     RestrictedPrior,
     check_estimator_arg,
@@ -79,7 +78,9 @@ class NSPE(NeuralInference):
         # potentially for z-scoring.
         check_estimator_arg(score_estimator)
         if isinstance(score_estimator, str):
-            self._build_neural_net = posterior_score_nn(sde_type=sde_type, score_net_type=score_estimator, **kwargs)
+            self._build_neural_net = posterior_score_nn(
+                sde_type=sde_type, score_net_type=score_estimator, **kwargs
+            )
         else:
             self._build_neural_net = score_estimator
 
@@ -154,10 +155,8 @@ class NSPE(NeuralInference):
 
         # Check for problematic z-scoring
         warn_if_zscoring_changes_data(x)
-    
-        npe_msg_on_invalid_x(
-            num_nans, num_infs, exclude_invalid_x, "Single-round NPE"
-        )
+
+        npe_msg_on_invalid_x(num_nans, num_infs, exclude_invalid_x, "Single-round NPE")
 
         self._check_proposal(proposal)
 
@@ -339,7 +338,7 @@ class NSPE(NeuralInference):
                     calibration_kernel,
                     force_first_round_loss=force_first_round_loss,
                 )
-                
+
                 train_loss = torch.mean(train_losses)
 
                 train_loss_sum += train_losses.sum().item()
@@ -408,7 +407,7 @@ class NSPE(NeuralInference):
         self._neural_net.zero_grad(set_to_none=True)
 
         return deepcopy(self._neural_net)
-    
+
     def _converged(self, epoch: int, stop_after_epochs: int) -> bool:
         return epoch > stop_after_epochs
 
@@ -464,11 +463,11 @@ class NSPE(NeuralInference):
         if score_estimator is None:
             score_estimator = self._neural_net
             # If internal net is used device is defined.
-            device = self._device
+            # device = self._device
         else:
             score_estimator = score_estimator
             # Otherwise, infer it from the device of the net parameters.
-            device = next(score_estimator.parameters()).device.type
+        # device = next(score_estimator.parameters()).device.type
 
         potential_fn, theta_transform = score_estimator_based_potential(
             score_estimator=score_estimator,
@@ -480,13 +479,12 @@ class NSPE(NeuralInference):
             raise NotImplementedError("ODE-based sampling is not yet implemented.")
         elif sample_with == "sde":
             posterior = ScorePosterior(score_estimator, prior, x_shape=self._x_shape)
-       
+
         self._posterior = posterior
         # Store models at end of each round.
         self._model_bank.append(deepcopy(self._posterior))
 
         return deepcopy(self._posterior)
-
 
     def _loss_proposal_posterior(
         self,
@@ -495,7 +493,6 @@ class NSPE(NeuralInference):
         masks: Tensor,
         proposal: Optional[Any],
     ) -> Tensor:
-        
         raise NotImplementedError
 
     def _loss(

@@ -129,8 +129,8 @@ def _bridge(
     track_gradients: bool = False,
 ):
     r"""
-    Returns the score-based potential for multiple IID observations. This can require a special solver
-    to obtain the correct tall posterior.
+    Returns the score-based potential for multiple IID observations. This can require a
+    special solver to obtain the correct tall posterior.
 
     Args:
         x: The observed data.

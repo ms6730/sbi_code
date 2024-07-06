@@ -4,10 +4,10 @@ from typing import Callable, Union
 import torch
 from torch import Tensor, nn
 
-from sbi.neural_nets.vf_estimators.base import VectorFieldEstimator
+from sbi.neural_nets.estimators.base import ConditionalVectorFieldEstimator
 
 
-class ScoreEstimator(VectorFieldEstimator):
+class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
     r"""Score matching for score-based generative models (e.g., denoising diffusion).
     The estimator neural network (this class) learns the score function, i.e., gradient
     of the conditional probability density with respect to the input, which can be used
@@ -23,8 +23,9 @@ class ScoreEstimator(VectorFieldEstimator):
     def __init__(
         self,
         net: nn.Module,
+        input_shape: torch.Size,
         condition_shape: torch.Size,
-        weight_fn: Union[str, Callable],
+        weight_fn: Union[str, Callable] = "max_likelihood",
     ) -> None:
         r"""Score estimator class that estimates the conditional score function, i.e.,
         gradient of the density p(xt|x0).
@@ -40,7 +41,7 @@ class ScoreEstimator(VectorFieldEstimator):
                 - a custom function that returns a Callable.
 
         """
-        super().__init__(net, condition_shape)
+        super().__init__(net, input_shape, condition_shape)
 
         # Set lambdas (variance weights) function.
         self._set_weight_fn(weight_fn)
@@ -51,75 +52,6 @@ class ScoreEstimator(VectorFieldEstimator):
         # These still need to be computed (mean and std of the noise distribution).
         self.mean = 0.0
         self.std = 1.0
-
-    def mean_t_fn(self, times: Tensor) -> Tensor:
-        r"""Conditional mean function, E[xt|x0], specifying the "mean factor" at a given
-        time, which is always multiplied by x0 to get the mean of the noise distribution
-        , i.e., p(xt|x0) = N(xt; mean_t(t)*x0, std_t(t)).
-
-        Args:
-            times: SDE time variable in [0,1].
-
-        Raises:
-            NotImplementedError: This method is implemented in each individual SDE
-            classes.
-        """
-        raise NotImplementedError
-
-    def mean_fn(self, x0: Tensor, times: Tensor) -> Tensor:
-        r"""Mean function of the SDE, which just multiplies the specific "mean factor"
-        by the original input x0, to get the mean of the noise distribution, i.e.,
-        p(xt|x0) = N(xt; mean_t(t)*x0, std_t(t)).
-
-        Args:
-            x0: Initial input data.
-            times: SDE time variable in [0,1].
-
-        Returns:
-            Mean of the noise distribution at a given time.
-        """
-        return self.mean_t_fn(times) * x0
-
-    def std_fn(self, times: Tensor) -> Tensor:
-        r"""Standard deviation function of the noise distribution at a given time,
-
-        i.e., p(xt|x0) = N(xt; mean_t(t)*x0, std_t(t)).
-
-        Args:
-            times: SDE time variable in [0,1].
-
-        Raises:
-            NotImplementedError: This method is implemented in each individual SDE
-            classes.
-        """
-        raise NotImplementedError
-
-    def drift_fn(self, input: Tensor, times: Tensor) -> Tensor:
-        r"""Drift function, f(x,t), of the SDE described by dx = f(x,t)dt + g(x,t)dW.
-
-        Args:
-            input: Original data, x0.
-            times: SDE time variable in [0,1].
-
-        Raises:
-            NotImplementedError: This method is implemented in each individual SDE
-            classes.
-        """
-        raise NotImplementedError
-
-    def diffusion_fn(self, input: Tensor, times: Tensor) -> Tensor:
-        r"""Diffusion function, g(x,t), of the SDE described by
-                              dx = f(x,t)dt + g(x,t)dW.
-
-        Args:
-            input: Original data, x0.
-            times: SDE time variable in [0,1].
-
-        Raises:
-            NotImplementedError: This method is implemented in each individual SDE
-            classes.
-        """
-        raise NotImplementedError
 
     def forward(self, input: Tensor, condition: Tensor, times: Tensor) -> Tensor:
         r"""Forward pass of the score estimator network to compute the conditional score
@@ -199,6 +131,75 @@ class ScoreEstimator(VectorFieldEstimator):
 
         return weights * loss
 
+    def mean_t_fn(self, times: Tensor) -> Tensor:
+        r"""Conditional mean function, E[xt|x0], specifying the "mean factor" at a given
+        time, which is always multiplied by x0 to get the mean of the noise distribution
+        , i.e., p(xt|x0) = N(xt; mean_t(t)*x0, std_t(t)).
+
+        Args:
+            times: SDE time variable in [0,1].
+
+        Raises:
+            NotImplementedError: This method is implemented in each individual SDE
+            classes.
+        """
+        raise NotImplementedError
+
+    def mean_fn(self, x0: Tensor, times: Tensor) -> Tensor:
+        r"""Mean function of the SDE, which just multiplies the specific "mean factor"
+        by the original input x0, to get the mean of the noise distribution, i.e.,
+        p(xt|x0) = N(xt; mean_t(t)*x0, std_t(t)).
+
+        Args:
+            x0: Initial input data.
+            times: SDE time variable in [0,1].
+
+        Returns:
+            Mean of the noise distribution at a given time.
+        """
+        return self.mean_t_fn(times) * x0
+
+    def std_fn(self, times: Tensor) -> Tensor:
+        r"""Standard deviation function of the noise distribution at a given time,
+
+        i.e., p(xt|x0) = N(xt; mean_t(t)*x0, std_t(t)).
+
+        Args:
+            times: SDE time variable in [0,1].
+
+        Raises:
+            NotImplementedError: This method is implemented in each individual SDE
+            classes.
+        """
+        raise NotImplementedError
+
+    def drift_fn(self, input: Tensor, times: Tensor) -> Tensor:
+        r"""Drift function, f(x,t), of the SDE described by dx = f(x,t)dt + g(x,t)dW.
+
+        Args:
+            input: Original data, x0.
+            times: SDE time variable in [0,1].
+
+        Raises:
+            NotImplementedError: This method is implemented in each individual SDE
+            classes.
+        """
+        raise NotImplementedError
+
+    def diffusion_fn(self, input: Tensor, times: Tensor) -> Tensor:
+        r"""Diffusion function, g(x,t), of the SDE described by
+                              dx = f(x,t)dt + g(x,t)dW.
+
+        Args:
+            input: Original data, x0.
+            times: SDE time variable in [0,1].
+
+        Raises:
+            NotImplementedError: This method is implemented in each individual SDE
+            classes.
+        """
+        raise NotImplementedError
+
     def _set_weight_fn(self, weight_fn: Union[str, Callable]):
         """Set the weight function.
 
@@ -221,12 +222,13 @@ class ScoreEstimator(VectorFieldEstimator):
             raise ValueError(f"Weight function {weight_fn} not recognized.")
 
 
-class VPScoreEstimator(ScoreEstimator):
+class VPScoreEstimator(ConditionalScoreEstimator):
     """Class for score estimators with variance preserving SDEs (i.e., DDPM)."""
 
     def __init__(
         self,
         net: nn.Module,
+        input_shape: torch.Size,
         condition_shape: torch.Size,
         weight_fn: Union[str, Callable] = "max_likelihood",
         beta_min: float = 0.01,
@@ -234,7 +236,7 @@ class VPScoreEstimator(ScoreEstimator):
     ) -> None:
         self.beta_min = beta_min
         self.beta_max = beta_max
-        super().__init__(net, condition_shape, weight_fn=weight_fn)
+        super().__init__(net, input_shape, condition_shape, weight_fn=weight_fn)
 
     def mean_t_fn(self, times: Tensor) -> Tensor:
         """Conditional mean function for variance preserving SDEs.
@@ -305,12 +307,13 @@ class VPScoreEstimator(ScoreEstimator):
         return g
 
 
-class subVPScoreEstimator(ScoreEstimator):
+class subVPScoreEstimator(ConditionalScoreEstimator):
     """Class for score estimators with sub-variance preserving SDEs."""
 
     def __init__(
         self,
         net: nn.Module,
+        input_shape: torch.Size,
         condition_shape: torch.Size,
         weight_fn: Union[str, Callable] = "max_likelihood",
         beta_min: float = 0.01,
@@ -318,7 +321,7 @@ class subVPScoreEstimator(ScoreEstimator):
     ) -> None:
         self.beta_min = beta_min
         self.beta_max = beta_max
-        super().__init__(net, condition_shape, weight_fn=weight_fn)
+        super().__init__(net, input_shape, condition_shape, weight_fn=weight_fn)
 
     def mean_t_fn(self, times: Tensor) -> Tensor:
         """Conditional mean function for sub-variance preserving SDEs.
@@ -402,12 +405,13 @@ class subVPScoreEstimator(ScoreEstimator):
         return g
 
 
-class VEScoreEstimator(ScoreEstimator):
+class VEScoreEstimator(ConditionalScoreEstimator):
     """Class for score estimators with variance exploding SDEs (i.e., NCSN / SMLD)."""
 
     def __init__(
         self,
         net: nn.Module,
+        input_shape: torch.Size,
         condition_shape: torch.Size,
         weight_fn: Union[str, Callable] = "max_likelihood",
         sigma_min: float = 0.01,
@@ -415,7 +419,7 @@ class VEScoreEstimator(ScoreEstimator):
     ) -> None:
         self.sigma_min = sigma_min
         self.sigma_max = sigma_max
-        super().__init__(net, condition_shape, weight_fn=weight_fn)
+        super().__init__(net, input_shape, condition_shape, weight_fn=weight_fn)
 
     def mean_t_fn(self, times: Tensor) -> Tensor:
         """Conditional mean function for variance exploding SDEs, which is always 1.

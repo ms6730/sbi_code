@@ -10,7 +10,7 @@ from sbi.inference.posteriors.base_posterior import NeuralPosterior
 from sbi.inference.potentials.score_based_potential import (
     score_estimator_based_potential,
 )
-from sbi.neural_nets.vf_estimators.score_estimator import ScoreEstimator
+from sbi.neural_nets.estimators.score_estimator import ConditionalScoreEstimator
 from sbi.samplers.score.score import score_based_sampler
 from sbi.sbi_types import Shape
 from sbi.utils import check_prior, within_support
@@ -34,7 +34,7 @@ class ScorePosterior(NeuralPosterior):
 
     def __init__(
         self,
-        score_estimator: ScoreEstimator,
+        score_estimator: ConditionalScoreEstimator,
         prior: Distribution,
         max_sampling_batch_size: int = 10_000,
         device: Optional[str] = None,
@@ -288,6 +288,15 @@ class ScorePosterior(NeuralPosterior):
 
         return self._leakage_density_correction_factor  # type: ignore
     '''
+
+    def sample_batched(
+        self,
+        sample_shape: torch.Size,
+        x: Tensor,
+        max_sampling_batch_size: int = 10000,
+        show_progress_bars: bool = True,
+    ) -> Tensor:
+        raise NotImplementedError
 
     def map(
         self,

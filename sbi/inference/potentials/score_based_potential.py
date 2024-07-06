@@ -8,13 +8,13 @@ from torch import Tensor
 from torch.distributions import Distribution
 
 from sbi.inference.potentials.base_potential import BasePotential
-from sbi.neural_nets.vf_estimators.score_estimator import ScoreEstimator
+from sbi.neural_nets.estimators.score_estimator import ConditionalScoreEstimator
 from sbi.sbi_types import TorchTransform
 from sbi.utils import mcmc_transform
 
 
 def score_estimator_based_potential(
-    score_estimator: ScoreEstimator,
+    score_estimator: ConditionalScoreEstimator,
     prior: Distribution,
     x_o: Optional[Tensor],
     x_o_shape: Optional[Tuple[int, ...]] = None,
@@ -49,7 +49,7 @@ class ScoreBasedPotential(BasePotential):
 
     def __init__(
         self,
-        score_estimator: ScoreEstimator,
+        score_estimator: ConditionalScoreEstimator,
         prior: Optional[Distribution],
         x_o: Optional[Tensor],
         x_o_shape: Optional[Tuple[int, ...]] = None,
@@ -123,7 +123,7 @@ def _bridge(
     x: Tensor,
     x_shape: Tuple[int, ...],
     theta: Tensor,
-    estimator: ScoreEstimator,
+    estimator: ConditionalScoreEstimator,
     diffusion_time: Tensor,
     prior: Distribution,
     track_gradients: bool = False,

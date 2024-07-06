@@ -6,8 +6,8 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from sbi.neural_nets.embedding_nets import GaussianFourierTimeEmbedding
-from sbi.neural_nets.vf_estimators.score_estimator import (
-    ScoreEstimator,
+from sbi.neural_nets.estimators.score_estimator import (
+    ConditionalScoreEstimator,
     VEScoreEstimator,
     VPScoreEstimator,
     subVPScoreEstimator,
@@ -118,8 +118,8 @@ def build_input_layer(
 def build_score_estimator(
     batch_x: Tensor,
     batch_y: Tensor,
-    sde_type: Optional[str] = 'vp',
-    score_net: Optional[Union[str, nn.Module]] = 'mlp',
+    sde_type: Optional[str] = "vp",
+    score_net: Optional[Union[str, nn.Module]] = "mlp",
     z_score_x: Optional[str] = "independent",
     z_score_y: Optional[str] = "independent",
     t_embedding_dim: int = 16,
@@ -128,7 +128,7 @@ def build_score_estimator(
     embedding_net_x: nn.Module = nn.Identity(),
     embedding_net_y: nn.Module = nn.Identity(),
     **kwargs,
-) -> ScoreEstimator:
+) -> ConditionalScoreEstimator:
     """Builds score estimator for score-based generative models.
 
     Args:
@@ -208,7 +208,7 @@ def build_score_estimator(
         raise ValueError(f"SDE type: {sde_type} not supported.")
 
     neural_net = nn.Sequential(input_layer, score_net)
-    return estimator(neural_net, batch_y.shape, **kwargs)
+    return estimator(neural_net, batch_x.shape[1:], batch_y.shape[1:], **kwargs)
 
 
 class MLP(nn.Module):

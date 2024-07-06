@@ -21,8 +21,8 @@ from sbi.inference.posteriors.score_posterior import ScorePosterior
 from sbi.inference.potentials.score_based_potential import (
     score_estimator_based_potential,
 )
+from sbi.neural_nets.estimators.score_estimator import ConditionalScoreEstimator
 from sbi.neural_nets.factory import posterior_score_nn
-from sbi.neural_nets.vf_estimators.score_estimator import ScoreEstimator
 from sbi.utils import (
     RestrictedPrior,
     check_estimator_arg,
@@ -202,7 +202,7 @@ class NSPE(NeuralInference):
         retrain_from_scratch: bool = False,
         show_train_summary: bool = False,
         dataloader_kwargs: Optional[dict] = None,
-    ) -> ScoreEstimator:
+    ) -> ConditionalScoreEstimator:
         r"""Return density estimator that approximates the distribution $p(\theta|x)$.
 
         Args:
@@ -413,7 +413,7 @@ class NSPE(NeuralInference):
 
     def build_posterior(
         self,
-        score_estimator: Optional[ScoreEstimator] = None,
+        score_estimator: Optional[ConditionalScoreEstimator] = None,
         prior: Optional[Distribution] = None,
         sample_with: str = "sde",
     ) -> Union[ScorePosterior, DirectPosterior]:

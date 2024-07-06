@@ -28,7 +28,7 @@ from sbi.neural_nets.flow import (
 )
 from sbi.neural_nets.mdn import build_mdn
 from sbi.neural_nets.mnle import build_mnle
-from sbi.neural_nets.vector_field import build_score_estimator
+from sbi.neural_nets.score_nets import build_score_estimator
 from sbi.utils.nn_utils import check_net_device
 
 model_builders = {

@@ -186,7 +186,7 @@ class LikelihoodEstimator(NeuralInference, ABC):
                 list(self._neural_net.parameters()),
                 lr=learning_rate,
             )
-            self.epoch, self._val_log_prob = 0, float("-Inf")
+            self.epoch, self._val_loss = 0, float("Inf")
 
         while self.epoch <= max_num_epochs and not self._converged(
             self.epoch, stop_after_epochs
@@ -222,7 +222,7 @@ class LikelihoodEstimator(NeuralInference, ABC):
 
             # Calculate validation performance.
             self._neural_net.eval()
-            val_log_prob_sum = 0
+            val_loss_sum = 0
             with torch.no_grad():
                 for batch in val_loader:
                     theta_batch, x_batch = (
@@ -231,14 +231,14 @@ class LikelihoodEstimator(NeuralInference, ABC):
                     )
                     # Evaluate on x with theta as context.
                     val_losses = self._loss(theta=theta_batch, x=x_batch)
-                    val_log_prob_sum -= val_losses.sum().item()
+                    val_loss_sum -= val_losses.sum().item()
 
             # Take mean over all validation samples.
-            self._val_log_prob = val_log_prob_sum / (
+            self._val_loss = val_loss_sum / (
                 len(val_loader) * val_loader.batch_size  # type: ignore
             )
             # Log validation log prob for every epoch.
-            self._summary["validation_loss"].append(self._val_log_prob)
+            self._summary["validation_loss"].append(self._val_loss)
 
             self._maybe_show_progress(self._show_progress_bars, self.epoch)
 

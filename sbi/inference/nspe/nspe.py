@@ -217,7 +217,7 @@ class NSPE(NeuralInference):
         show_train_summary: bool = False,
         dataloader_kwargs: Optional[dict] = None,
     ) -> ConditionalScoreEstimator:
-        r"""Returns a scpre estimator that approximates the score
+        r"""Returns a score estimator that approximates the score
         $\nabla_\theta \log p(\theta|x)$.
 
         Args:

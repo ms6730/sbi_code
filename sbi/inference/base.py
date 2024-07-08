@@ -469,11 +469,11 @@ class NeuralInference(ABC):
         Scalar tags:
             - epochs_trained:
                 number of epochs trained
-            - best_validation_log_prob:
-                best validation log prob (for each round).
-            - validation_log_probs:
-                validation log probs for every epoch (for each round).
-            - training_log_probs
+            - best_validation_loss:
+                best validation loss (for each round).
+            - validation_loss:
+                validation loss for every epoch (for each round).
+            - training_loss
                 training log probs for every epoch (for each round).
             - epoch_durations_sec
                 epoch duration for every epoch (for each round)
@@ -493,7 +493,7 @@ class NeuralInference(ABC):
             global_step=round_ + 1,
         )
 
-        # Add validation log prob for every epoch.
+        # Add validation loss for every epoch.
         # Offset with all previous epochs.
         offset = (
             torch.tensor(self._summary["epochs_trained"][:-1], dtype=torch.int)

@@ -206,9 +206,9 @@ class MockVPScoreEstimator(VEScoreEstimator):
         # TODO make the dimensionality an argument
         self.gaussian_mix = Gaussian_MixtGaussian_mD(1)
 
-    def forward(self, input: Tensor, condition: Tensor, times: Tensor) -> Tensor:
-        mean_val = self.mean_fn(torch.ones_like(input), times)
-        std_val = self.std_fn(times)
+    def forward(self, input: Tensor, condition: Tensor, time: Tensor) -> Tensor:
+        mean_val = self.mean_fn(torch.ones_like(input), time)
+        std_val = self.std_fn(time)
 
         gm = self.gaussian_mix.diffused_posterior_mean_std(
             condition, mean_val[0].item(), std_val[0].item()

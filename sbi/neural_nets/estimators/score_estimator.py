@@ -53,7 +53,7 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
         self.mean = 0.0
         self.std = 1.0
 
-    def forward(self, input: Tensor, condition: Tensor, times: Tensor) -> Tensor:
+    def forward(self, input: Tensor, condition: Tensor, time: Tensor) -> Tensor:
         r"""Forward pass of the score estimator network to compute the conditional score
         at a given time.
 
@@ -66,15 +66,15 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
             Score (gradient of the density) at a given time, matches input shape.
         """
         # Expand times if it's a scalar.
-        if times.ndim == 1:
-            times = times.expand(input.shape[0])
+        if time.ndim == 1:
+            time = time.expand(input.shape[0])
 
         # Predict noise and divide by standard deviation to mirror target score.
         # TODO Replace with Michaels magic shapeing function
         # print(input.shape, condition.shape, times.shape)
-        if times.shape.numel() == 1:
-            times = torch.repeat_interleave(times[None], input.shape[0], dim=0)
-            times = times.reshape((input.shape[0],))
+        if time.shape.numel() == 1:
+            time = torch.repeat_interleave(time[None], input.shape[0], dim=0)
+            time = time.reshape((input.shape[0],))
 
         input_shape = input.shape
         input = input.reshape((-1, input.shape[-1]))
@@ -83,8 +83,8 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
             condition, input.shape[0] // condition.shape[0], dim=0
         )
         # print(input.shape, condition.shape, times.shape)
-        eps_pred = self.net([input, condition, times])
-        std = self.std_fn(times)
+        eps_pred = self.net([input, condition, time])
+        std = self.std_fn(time)
         eps_pred = eps_pred
         score = eps_pred / std
         return score.reshape(input_shape)

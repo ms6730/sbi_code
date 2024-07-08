@@ -92,7 +92,7 @@ class ScoreBasedPotential(BasePotential):
         # If no, multiple iid observations are are present.
         if self.x_o.shape[1:] == self.x_o_shape:
             score_trial_sum = self.score_estimator.forward(
-                input=theta, condition=self.x_o, times=diffusion_time
+                input=theta, condition=self.x_o, time=diffusion_time
             )
         else:
             if self.prior is None:
@@ -155,7 +155,7 @@ def _bridge(
     # TODO needs to conform with the new shape handling
     with torch.set_grad_enabled(track_gradients):
         score_trial_batch = estimator.forward(
-            input=theta, condition=x, times=diffusion_time
+            input=theta, condition=x, time=diffusion_time
         )
 
         score_trial_sum = score_trial_batch.sum(0)

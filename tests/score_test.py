@@ -7,7 +7,7 @@ import torch
 from torch import Tensor
 from torch.distributions.multivariate_normal import MultivariateNormal
 
-from sbi.neural_nets.vf_estimators.score_estimator import (
+from sbi.neural_nets.estimators.score_estimator import (
     VEScoreEstimator,
 )
 

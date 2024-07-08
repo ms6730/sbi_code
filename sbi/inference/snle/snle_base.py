@@ -193,7 +193,7 @@ class LikelihoodEstimator(NeuralInference, ABC):
         ):
             # Train for a single epoch.
             self._neural_net.train()
-            train_log_probs_sum = 0
+            train_loss_sum = 0
             for batch in train_loader:
                 self.optimizer.zero_grad()
                 theta_batch, x_batch = (
@@ -203,7 +203,7 @@ class LikelihoodEstimator(NeuralInference, ABC):
                 # Evaluate on x with theta as context.
                 train_losses = self._loss(theta=theta_batch, x=x_batch)
                 train_loss = torch.mean(train_losses)
-                train_log_probs_sum -= train_losses.sum().item()
+                train_loss_sum += train_losses.sum().item()
 
                 train_loss.backward()
                 if clip_max_norm is not None:
@@ -215,10 +215,10 @@ class LikelihoodEstimator(NeuralInference, ABC):
 
             self.epoch += 1
 
-            train_log_prob_average = train_log_probs_sum / (
+            train_loss_average = train_loss_sum / (
                 len(train_loader) * train_loader.batch_size  # type: ignore
             )
-            self._summary["training_loss"].append(train_log_prob_average)
+            self._summary["training_loss"].append(train_loss_average)
 
             # Calculate validation performance.
             self._neural_net.eval()
@@ -231,7 +231,7 @@ class LikelihoodEstimator(NeuralInference, ABC):
                     )
                     # Evaluate on x with theta as context.
                     val_losses = self._loss(theta=theta_batch, x=x_batch)
-                    val_loss_sum -= val_losses.sum().item()
+                    val_loss_sum += val_losses.sum().item()
 
             # Take mean over all validation samples.
             self._val_loss = val_loss_sum / (

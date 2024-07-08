@@ -3,7 +3,7 @@
 from typing import Optional, Union
 
 import torch
-from torch import Tensor, log
+from torch import Tensor
 from torch.distributions import Distribution
 
 from sbi.inference.posteriors.base_posterior import NeuralPosterior
@@ -13,23 +13,21 @@ from sbi.inference.potentials.score_based_potential import (
 from sbi.neural_nets.estimators.score_estimator import ConditionalScoreEstimator
 from sbi.samplers.score.score import score_based_sampler
 from sbi.sbi_types import Shape
-from sbi.utils import check_prior, within_support
-from sbi.utils.torchutils import ensure_theta_batched
+from sbi.utils import check_prior
 
 
 class ScorePosterior(NeuralPosterior):
-    r"""Posterior $p(\theta|x_o)$ with `log_prob()` and `sample()` methods, only
-    applicable to SNPE.<br/><br/>
-    Class to obtain a posterior for a diffusion model built with a score_estimator
-        (a neural network to approximate the score).
-    However, for bounded priors, we can have leakage: it puts non-zero
-    mass in regions where the prior is zero. The `ScoreEstimatorPosterior` class also
-        handles these cases.
-    Specifically, this class offers the following functionality:<br/>
-    - correct the calculation of the log probability such that it compensates for the
-      leakage.<br/> ???
-    - reject samples that lie outside of the prior bounds.<br/><br/>
-    For now, this class can not be used in combination with SNLE or SNRE.
+    r"""Posterior $p(\theta|x_o)$ with `log_prob()` and `sample()` methods. It samples
+    from the diffusion model given the score_estimator and rejects samples that lie
+    outside of the prior bounds.
+
+    The posterior is defined by a score estimator and a prior. The score estimator
+    provides the gradient of the log-posterior with respect to the parameters. The
+    prior is used to reject samples that lie outside of the prior bounds.
+
+    NOTE: The `log_prob()` method is not implemented yet. It will be implemented in a
+    future release using the probability flow ODEs.
+
     """
 
     def __init__(
@@ -84,6 +82,8 @@ class ScorePosterior(NeuralPosterior):
         self,
         sample_shape: Shape = torch.Size(),
         x: Optional[Tensor] = None,
+        method: str = "euler_maruyma",
+        steps: int = 500,
         max_sampling_batch_size: int = 10_000,
         sample_with: Optional[str] = None,
         show_progress_bars: bool = True,
@@ -91,12 +91,15 @@ class ScorePosterior(NeuralPosterior):
         r"""Return samples from posterior distribution $p(\theta|x)$.
 
         Args:
-            sample_shape: Desired shape of samples that are drawn from posterior. If
-                sample_shape is multidimensional we simply draw `sample_shape.numel()`
-                samples and then reshape into the desired shape.
-            sample_with: This argument only exists to keep backward-compatibility with
-                `sbi` v0.17.2 or older. If it is set, we instantly raise an error.
-            show_progress_bars: Whether to show sampling progress monitor.
+            sample_shape: Shape of the samples to be drawn.
+            x: Deprecated - use `.set_default_x()` prior to `.sample()`.
+            method: Method to use for sampling. Currently, only "euler_maruyma" is
+                supported.
+            steps: Number of steps to take for the Euler-Maruyama method.
+            max_sampling_batch_size: Maximum batch size for sampling.
+            sample_with: Deprecated - use `.build_posterior(sample_with=...)` prior to
+                `.sample()`.
+            show_progress_bars: Whether to show a progress bar during sampling.
         """
 
         num_samples = torch.Size(sample_shape).numel()
@@ -106,15 +109,6 @@ class ScorePosterior(NeuralPosterior):
         self.potential_fn.set_x(
             x.unsqueeze(0)
         )  # TODO Fix when new batching rules are in
-
-        # try:
-        #     x = x.reshape(*condition_shape)
-        # except RuntimeError as err:
-        #     raise ValueError(
-        #         f"Expected a single `x` which should broadcastable to shape \
-        #           {condition_shape}, but got {x.shape}. For batched eval \
-        #           see issue #990"
-        #     ) from err
 
         max_sampling_batch_size = (
             self.max_sampling_batch_size
@@ -129,15 +123,18 @@ class ScorePosterior(NeuralPosterior):
                 f"`.build_posterior(sample_with={sample_with}).`"
             )
 
-        # proposal = ScoreDistribution(score_estimator=self.score_estimator,
-        # condition = x, sample_with = 'sde', event_shape=self.prior.event_shape)
-
-        num_samples = torch.Size(sample_shape).numel()
+        # TODO: Prior can be `None` (extract from score estimator)
         theta_dim = self.prior.event_shape.numel()
+
         proposal = torch.distributions.Normal(
             torch.zeros(theta_dim), torch.ones(theta_dim)
-        )
-        ts = torch.linspace(1.0, 1e-3, 1000)
+        )  # TODO This must be extracted from the score estimator (can be different!)
+
+        T_max = self.score_estimator.T_max
+        T_min = self.score_estimator.T_min
+        ts = torch.linspace(T_max, T_min, steps)
+
+        # TODO: Use `method` to select the correct sampler
         samples = score_based_sampler(
             score_based_potential=self.potential_fn,  # type: ignore
             proposal=proposal,
@@ -148,6 +145,7 @@ class ScorePosterior(NeuralPosterior):
             num_samples=num_samples,
         )
 
+        # TODO: Implement accept-reject sampling ?
         # samples = accept_reject_sample(
         #     proposal=proposal,  # type Union[nn.module, Distribution, NeuralPosterior]
         #     accept_reject_fn=lambda theta: within_support(self.prior, theta),
@@ -193,101 +191,7 @@ class ScorePosterior(NeuralPosterior):
             support of the prior, -∞ (corresponding to 0 probability) outside.
         """
 
-        raise NotImplementedError
-        x = self._x_else_default_x(x)
-        condition_shape = self.posterior_estimator._condition_shape
-        try:
-            x = x.reshape(*condition_shape)
-        except RuntimeError as err:
-            raise ValueError(
-                f"Expected a single `x` which should broadcastable to shape \
-                  {condition_shape}, but got {x.shape}. For batched eval \
-                  see issue #990"
-            ) from err
-
-        # TODO Train exited here, entered after sampling?
-        self.posterior_estimator.eval()
-
-        theta = ensure_theta_batched(torch.as_tensor(theta))
-
-        with torch.set_grad_enabled(track_gradients):
-            # Evaluate on device, move back to cpu for comparison with prior.
-            unnorm_log_prob = self.posterior_estimator.log_prob(theta, condition=x)
-
-            # Force probability to be zero outside prior support.
-            in_prior_support = within_support(self.prior, theta)
-
-            masked_log_prob = torch.where(
-                in_prior_support,
-                unnorm_log_prob,
-                torch.tensor(float("-inf"), dtype=torch.float32, device=self._device),
-            )
-
-            if leakage_correction_params is None:
-                leakage_correction_params = dict()  # use defaults
-            log_factor = (
-                log(self.leakage_correction(x=x, **leakage_correction_params))
-                if norm_posterior
-                else 0
-            )
-
-            return masked_log_prob - log_factor
-
-    '''
-    @torch.no_grad()
-    def leakage_correction(
-        self,
-        x: Tensor,
-        num_rejection_samples: int = 10_000,
-        force_update: bool = False,
-        show_progress_bars: bool = False,
-        rejection_sampling_batch_size: int = 10_000,
-    ) -> Tensor:
-        r"""Return leakage correction factor for a leaky posterior density estimate.
-
-        The factor is estimated from the acceptance probability during rejection
-        sampling from the posterior.
-
-        This is to avoid re-estimating the acceptance probability from scratch
-        whenever `log_prob` is called and `norm_posterior=True`. Here, it
-        is estimated only once for `self.default_x` and saved for later. We
-        re-evaluate only whenever a new `x` is passed.
-
-        Arguments:
-            num_rejection_samples: Number of samples used to estimate correction factor.
-            show_progress_bars: Whether to show a progress bar during sampling.
-            rejection_sampling_batch_size: Batch size for rejection sampling.
-
-        Returns:
-            Saved or newly-estimated correction factor (as a scalar `Tensor`).
-        """
-
-        def acceptance_at(x: Tensor) -> Tensor:
-            return accept_reject_sample(
-                proposal=self.posterior_estimator,
-                accept_reject_fn=lambda theta: within_support(self.prior, theta),
-                num_samples=num_rejection_samples,
-                show_progress_bars=show_progress_bars,
-                sample_for_correction_factor=True,
-                max_sampling_batch_size=rejection_sampling_batch_size,
-                proposal_sampling_kwargs={"condition": x},
-            )[1]
-
-        # Check if the provided x matches the default x (short-circuit on identity).
-        is_new_x = self.default_x is None or (
-            x is not self.default_x and (x != self.default_x).any()
-        )
-
-        not_saved_at_default_x = self._leakage_density_correction_factor is None
-
-        if is_new_x:  # Calculate at x; don't save.
-            return acceptance_at(x)
-        elif not_saved_at_default_x or force_update:  # Calculate at default_x; save.
-            assert self.default_x is not None
-            self._leakage_density_correction_factor = acceptance_at(self.default_x)
-
-        return self._leakage_density_correction_factor  # type: ignore
-    '''
+        raise NotImplementedError("log_prob() is not implemented yet.")
 
     def sample_batched(
         self,
@@ -296,7 +200,7 @@ class ScorePosterior(NeuralPosterior):
         max_sampling_batch_size: int = 10000,
         show_progress_bars: bool = True,
     ) -> Tensor:
-        raise NotImplementedError
+        raise NotImplementedError("Batched sampling is not implemented yet.")
 
     def map(
         self,
@@ -353,8 +257,7 @@ class ScorePosterior(NeuralPosterior):
         Returns:
             The MAP estimate.
         """
-        raise NotImplementedError
-        return super().map(
+        super().map(
             x=x,
             num_iter=num_iter,
             num_to_optimize=num_to_optimize,
@@ -365,3 +268,31 @@ class ScorePosterior(NeuralPosterior):
             show_progress_bars=show_progress_bars,
             force_update=force_update,
         )
+
+    def _calculate_map(
+        self,
+        num_iter: int = 1_000,
+        num_to_optimize: int = 100,
+        learning_rate: float = 0.01,
+        init_method: Union[str, Tensor] = "posterior",
+        num_init_samples: int = 1_000,
+        save_best_every: int = 10,
+        show_progress_bars: bool = False,
+    ) -> Tensor:
+        """Calculates the maximum-a-posteriori estimate (MAP).
+
+        See `map()` method of child classes for docstring.
+        """
+
+        # if init_method == "posterior":
+        #     inits = self.sample((num_init_samples,))
+        # elif init_method == "proposal":
+        #     inits = self.proposal.sample((num_init_samples,))  # type: ignore
+        # elif isinstance(init_method, Tensor):
+        #     inits = init_method
+        # else:
+        #     raise ValueError
+
+        # TODO: Implement MAP optimization using the score estimator directly!
+
+        raise NotImplementedError("MAP optimization is not implemented yet.")

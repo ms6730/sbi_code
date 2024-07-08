@@ -48,19 +48,33 @@ class NSPE(NeuralInference):
         show_progress_bars: bool = True,
         **kwargs,
     ):
-        """Base class for Sequential Neural Posterior Estimation methods.
+        """Base class for Neural Score Posterior Estimation methods.
+
+        Instead of performing conditonal *density* estimation, NSPE methods perform
+        conditional *score* estimation i.e. they estimate the gradient of the log
+        density.
+
+        NOTE: Single-round NSPE is currently the only supported mode.
 
         Args:
-            density_estimator: If it is a string, use a pre-configured network of the
-                provided type (one of nsf, maf, mdn, made). Alternatively, a function
-                that builds a custom neural network can be provided. The function will
-                be called with the first batch of simulations (theta, x), which can
-                thus be used for shape inference and potentially for z-scoring. It
-                needs to return a PyTorch `nn.Module` implementing the density
-                estimator. The density estimator needs to provide the methods
-                `.log_prob` and `.sample()`.
+            prior: Prior distribution.
+            score_estimator: Neural network architecture for the score estimator. Can be
+                a string (e.g. 'mlp') or a callable that returns a neural network.
+            sde_type: Type of SDE to use. Must be one of ['vp', 've', 'subvp'].
+            device: Device to run the training on.
+            logging_level: Logging level for the training. Can be an integer or a
+                string.
+            summary_writer: Tensorboard summary writer.
+            show_progress_bars: Whether to show progress bars during training.
+            kwargs: Additional keyword arguments.
 
-        See docstring of `NeuralInference` class for all other arguments.
+        References:
+            - Geffner, Tomas, George Papamakarios, and Andriy Mnih. "Score modeling for
+              simulation-based inference." NeurIPS 2022 Workshop on Score-Based Methods.
+              2022.
+            - Sharrock, Louis, et al. "Sequential neural score estimation: Likelihood-
+              free inference with conditional score based diffusion models." arXiv
+              preprint arXiv:2210.04872 (2022).
         """
 
         super().__init__(
@@ -71,7 +85,7 @@ class NSPE(NeuralInference):
             show_progress_bars=show_progress_bars,
         )
 
-        # As detailed in the docstring, `density_estimator` is either a string or
+        # As detailed in the docstring, `score_estimator` is either a string or
         # a callable. The function creating the neural network is attached to
         # `_build_neural_net`. It will be called in the first round and receive
         # thetas and xs as inputs, so that they can be used for shape inference and
@@ -203,7 +217,8 @@ class NSPE(NeuralInference):
         show_train_summary: bool = False,
         dataloader_kwargs: Optional[dict] = None,
     ) -> ConditionalScoreEstimator:
-        r"""Return density estimator that approximates the distribution $p(\theta|x)$.
+        r"""Returns a scpre estimator that approximates the score
+        $\nabla_\theta \log p(\theta|x)$.
 
         Args:
             training_batch_size: Training batch size.
@@ -502,7 +517,7 @@ class NSPE(NeuralInference):
         masks: Tensor,
         proposal: Optional[Any],
     ) -> Tensor:
-        raise NotImplementedError
+        raise NotImplementedError("Multi-round NSPE is not yet implemented.")
 
     def _loss(
         self,
@@ -525,11 +540,10 @@ class NSPE(NeuralInference):
                 distribution different from the prior.
         """
         if self._round == 0 or force_first_round_loss:
-            # Use posterior log prob (without proposal correction) for first round.
+            # First round loss.
             loss = self._neural_net.loss(theta, x)
         else:
-            # Currently only works for `DensityEstimator` objects.
-            # Must be extended ones other Estimators are implemented. See #966,
+            # TODO: Implement proposal correction for multi-round SNSPE.
             loss = self._loss_proposal_posterior(theta, x, masks, proposal)
 
         return calibration_kernel(x) * loss

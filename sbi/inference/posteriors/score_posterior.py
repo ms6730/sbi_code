@@ -213,7 +213,7 @@ class ScorePosterior(NeuralPosterior):
         save_best_every: int = 10,
         show_progress_bars: bool = False,
         force_update: bool = False,
-    ) -> Tensor:
+    ) -> Optional[Tensor]:
         r"""Returns the maximum-a-posteriori estimate (MAP).
 
         The method can be interrupted (Ctrl-C) when the user sees that the

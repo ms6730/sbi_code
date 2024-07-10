@@ -14,6 +14,14 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
     to generate samples from the target distribution by solving the SDE starting from
     the base (Gaussian) distribution.
 
+    We assume the following SDE:
+                        dx = A(t)xdt + B(t)dW,
+    where A(t) and B(t) are the drift and diffusion functions, respectively, and dW is
+    a Wiener process. This will lead to marginal distribution of the form:
+                        p(xt|x0) = N(xt; mean_t(t)*x0, std_t(t)),
+    where mean_t(t) and std_t(t) are the conditional mean and standard deviation at a
+    given time t, respectively.
+
     Relevant literature:
     - Score-based generative modeling through SDE: https://arxiv.org/abs/2011.13456
     - Denoising diffusion probabilistic models: https://arxiv.org/abs/2006.11239
@@ -26,6 +34,10 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
         input_shape: torch.Size,
         condition_shape: torch.Size,
         weight_fn: Union[str, Callable] = "max_likelihood",
+        mean_0: float = 0.0,
+        std_0: float = 1.0,
+        T_min: float = 1e-3,
+        T_max: float = 1.0,
     ) -> None:
         r"""Score estimator class that estimates the conditional score function, i.e.,
         gradient of the density p(xt|x0).
@@ -47,11 +59,17 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
         self._set_weight_fn(weight_fn)
 
         # Min time for diffusion (0 can be numerically unstable).
-        self.T_min = 1e-3
+        self.T_min = T_min
+        self.T_max = T_max
 
-        # These still need to be computed (mean and std of the noise distribution).
-        self.mean = 0.0
-        self.std = 1.0
+        # Starting mean and std of the target distribution (otherwise assumes 0,1).
+        # This will be used to precondition the score network to improve training.
+        self.mean_0 = mean_0
+        self.std_0 = std_0
+
+        # We estimate the mean and std of the source distribution at time T_max.
+        self.mean_T = self.approx_marginal_mean(torch.tensor([T_max]))
+        self.std_T = self.approx_marginal_std(torch.tensor([T_max]))
 
     def forward(self, input: Tensor, condition: Tensor, time: Tensor) -> Tensor:
         r"""Forward pass of the score estimator network to compute the conditional score
@@ -65,31 +83,48 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
         Returns:
             Score (gradient of the density) at a given time, matches input shape.
         """
-        # Expand times if it's a scalar.
-        if time.ndim == 1:
-            time = time.expand(input.shape[0])
 
-        # Predict noise and divide by standard deviation to mirror target score.
-        # TODO Replace with Michaels magic shapeing function
-        # print(input.shape, condition.shape, times.shape)
         if time.shape.numel() == 1:
             time = torch.repeat_interleave(time[None], input.shape[0], dim=0)
             time = time.reshape((input.shape[0],))
 
+        mean = self.approx_marginal_mean(time)
+        std = self.approx_marginal_std(time)
+        # As input to the neural net we want to have something that changes proportianl
+        # to how the scores change
+        time_enc = self.std_fn(time)
+
+        # Time dependent z-scoring! Keeps input at similar scales
         input_shape = input.shape
         input = input.reshape((-1, input.shape[-1]))
+        input_enc = (input - mean) / std
+        # Condition (Z-scoring optionally managed by net)
         condition = condition.reshape(-1, condition.shape[-1])
         condition = torch.repeat_interleave(
             condition, input.shape[0] // condition.shape[0], dim=0
         )
-        # print(input.shape, condition.shape, times.shape)
-        eps_pred = self.net([input, condition, time])
-        std = self.std_fn(time)
-        eps_pred = eps_pred
-        score = eps_pred / std
-        return score.reshape(input_shape)
 
-    def loss(self, input: Tensor, condition: Tensor) -> Tensor:
+        # Approximate score becoming exact for t -> T_max, "skip connection"
+        score_gaussian = (input - mean) / std**2
+
+        # Score prediction by the network
+        score_pred = self.net([input_enc, condition, time_enc])
+        score_pred = score_pred / torch.clip(self.std_fn(time), 1e-3)
+
+        # Output pre-conditioned score
+        t = time[..., None]
+        output_score = (1 - t) * score_pred + t * score_gaussian
+        # Note maybe make it score_gaussian + mean_t * score_pred
+
+        return output_score.reshape(input_shape)
+
+    def loss(
+        self,
+        input: Tensor,
+        condition: Tensor,
+        control_variate=True,
+        control_variate_threshold=torch.inf,
+    ) -> Tensor:
         r"""Defines the denoising score matching loss (e.g., from Song et al., ICLR
         2021). A random diffusion time is sampled from [0,1], and the network is trained
         to predict thescore of the true conditional distribution given the noised input,
@@ -105,7 +140,7 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
 
         """
         # Sample diffusion times.
-        times = torch.clip(torch.rand((input.shape[0],)), self.T_min, 1.0)
+        times = torch.rand(input.shape[0]) * (self.T_max - self.T_min) + self.T_min
 
         # Sample noise.
         eps = torch.randn_like(input)
@@ -117,7 +152,7 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
         # Get noised input, i.e., p(xt|x0).
         input_noised = mean + std * eps
 
-        # Compute true score: -(mean - noised_input) / (std**2).
+        # Compute true cond. score: -(noised_input - mean) / (std**2).
         score_target = -eps / std
 
         # Predict score from noised input and diffusion time.
@@ -127,9 +162,70 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
         weights = self.weight_fn(times)
 
         # Compute MSE loss between network output and true score.
-        loss = torch.sum((score_target - score_pred) ** 2.0, dim=-1)
+        loss = torch.sum((score_pred - score_target) ** 2.0, dim=-1)
+
+        # For times -> 0 this loss has high variance, hece it can help a lot to add
+        # a control variate i.e. a term that has zero expectation but is strongly
+        # correlated with our objective. Todo so notice that the if we perform a
+        # 0 th order taylor expansion of the score network around the mean i.e.
+        # s(input_noised) = s(mean) + O(std), we get
+        #   E_eps[||-eps/std - s(mean)||^2]
+        # = E_eps[||eps||^2/std^2 + 2<s(mean),eps/std> + ||s(mean)||^2]
+        # = E_eps[||eps||^]/std^2 + 2<s(mean), E_eps[eps]/std> + C
+        # Notice that we can calculate this expectation analytically which will evaluate
+        # to D/std^2.
+        # This allows us to add a control variate to the loss that is zero on
+        # expectation i.e. (eps**2/std**2 - 2s(mean)eps**T + s(mean)**2 - D/std**2).
+        # For small std the Taylor expansion will be good and the control variate will
+        # strongly correlate with the objective, hence reducing the variance of the
+        # estimator.
+        # For large std the Taylor expansion will be bad and the control variate will
+        # only loosely correlate with the objective, hence could potentially increase
+        # the variance of the estimator.
+        # Proposed in https://arxiv.org/pdf/2101.03288
+
+        if control_variate:
+            D = input.shape[-1]
+            score_mean_pred = self.forward(mean, condition, times)
+            s = torch.squeeze(std, -1)
+
+            term1 = 2 / s * torch.sum(eps * score_mean_pred, dim=-1)
+            term2 = torch.sum(eps**2, dim=-1) / s**2
+            term3 = D / s**2
+
+            control_variate = term3 - term1 - term2
+
+            control_variate = torch.where(
+                s < control_variate_threshold, control_variate, 0.0
+            )
+
+            loss = loss + control_variate
 
         return weights * loss
+
+    def approx_marginal_mean(self, times: Tensor) -> Tensor:
+        r"""Approximate the marginal mean of the target distribution at a given time.
+
+        Args:
+            times: SDE time variable in [0,1].
+
+        Returns:
+            Approximate marginal mean at a given time.
+        """
+        return self.mean_t_fn(times) * self.mean_0
+
+    def approx_marginal_std(self, times: Tensor) -> Tensor:
+        r"""Approximate the marginal standard deviation of the target distribution at a
+        given time.
+
+        Args:
+            times: SDE time variable in [0,1].
+
+        Returns:
+            Approximate marginal standard deviation at a given time.
+        """
+        vars = self.mean_t_fn(times) ** 2 * self.std_0**2 + self.std_fn(times) ** 2
+        return torch.sqrt(vars)
 
     def mean_t_fn(self, times: Tensor) -> Tensor:
         r"""Conditional mean function, E[xt|x0], specifying the "mean factor" at a given
@@ -232,7 +328,7 @@ class VPScoreEstimator(ConditionalScoreEstimator):
         condition_shape: torch.Size,
         weight_fn: Union[str, Callable] = "max_likelihood",
         beta_min: float = 0.01,
-        beta_max: float = 20.0,
+        beta_max: float = 10.0,
     ) -> None:
         self.beta_min = beta_min
         self.beta_max = beta_max
@@ -317,11 +413,18 @@ class subVPScoreEstimator(ConditionalScoreEstimator):
         condition_shape: torch.Size,
         weight_fn: Union[str, Callable] = "max_likelihood",
         beta_min: float = 0.01,
-        beta_max: float = 20.0,
+        beta_max: float = 10.0,
     ) -> None:
         self.beta_min = beta_min
         self.beta_max = beta_max
-        super().__init__(net, input_shape, condition_shape, weight_fn=weight_fn)
+        super().__init__(
+            net,
+            input_shape,
+            condition_shape,
+            weight_fn=weight_fn,
+            T_min=1e-1,
+            T_max=1.0,
+        )
 
     def mean_t_fn(self, times: Tensor) -> Tensor:
         """Conditional mean function for sub-variance preserving SDEs.
@@ -392,7 +495,8 @@ class subVPScoreEstimator(ConditionalScoreEstimator):
         g = torch.sqrt(
             self._beta_schedule(times)
             * (
-                -torch.exp(
+                1
+                - torch.exp(
                     -2 * self.beta_min * times
                     - (self.beta_max - self.beta_min) * times**2
                 )
@@ -414,8 +518,8 @@ class VEScoreEstimator(ConditionalScoreEstimator):
         input_shape: torch.Size,
         condition_shape: torch.Size,
         weight_fn: Union[str, Callable] = "max_likelihood",
-        sigma_min: float = 0.01,
-        sigma_max: float = 10.0,
+        sigma_min: float = 0.001,
+        sigma_max: float = 5.0,
     ) -> None:
         self.sigma_min = sigma_min
         self.sigma_max = sigma_max
@@ -430,7 +534,7 @@ class VEScoreEstimator(ConditionalScoreEstimator):
         Returns:
             Conditional mean at a given time.
         """
-        return torch.tensor([1.0])
+        return torch.ones_like(times).unsqueeze(-1)
 
     def std_fn(self, times: Tensor) -> Tensor:
         """Standard deviation function for variance exploding SDEs.

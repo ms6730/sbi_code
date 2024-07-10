@@ -126,8 +126,14 @@ class ScorePosterior(NeuralPosterior):
         # TODO: Prior can be `None` (extract from score estimator)
         theta_dim = self.prior.event_shape.numel()
 
+        mean_T = torch.squeeze(self.score_estimator.mean_T) * torch.ones(
+            self.score_estimator._input_shape
+        )
+        std_T = torch.squeeze(self.score_estimator.std_T) * torch.ones(
+            self.score_estimator._input_shape
+        )
         proposal = torch.distributions.Normal(
-            torch.zeros(theta_dim), torch.ones(theta_dim)
+            mean_T, std_T
         )  # TODO This must be extracted from the score estimator (can be different!)
 
         T_max = self.score_estimator.T_max

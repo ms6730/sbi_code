@@ -210,6 +210,7 @@ class NSPE(NeuralInference):
         max_num_epochs: int = 2**31 - 1,
         clip_max_norm: Optional[float] = 5.0,
         calibration_kernel: Optional[Callable] = None,
+        ema_loss_decay: float = 0.1,
         resume_training: bool = False,
         force_first_round_loss: bool = False,
         discard_prior_samples: bool = False,
@@ -370,7 +371,17 @@ class NSPE(NeuralInference):
             train_loss_average = train_loss_sum / (
                 len(train_loader) * train_loader.batch_size  # type: ignore
             )
-            self._summary["training_loss"].append(train_loss_average)
+
+            # NOTE: Due to the inherently noisy nature we do instead log a exponential
+            # moving average of the training loss.
+            if len(self._summary["training_loss"]) == 0:
+                self._summary["training_loss"].append(train_loss_average)
+            else:
+                previous_loss = self._summary["training_loss"][-1]
+                self._summary["training_loss"].append(
+                    (1.0 - ema_loss_decay) * previous_loss
+                    + ema_loss_decay * train_loss_average
+                )
 
             # Calculate validation performance.
             self._neural_net.eval()
@@ -395,10 +406,21 @@ class NSPE(NeuralInference):
                     val_loss_sum += val_losses.sum().item()
 
             # Take mean over all validation samples.
-            self._val_loss = val_loss_sum / (
+            val_loss = val_loss_sum / (
                 len(val_loader) * val_loader.batch_size  # type: ignore
             )
-            # Log validation log prob for every epoch.
+
+            # NOTE: Due to the inherently noisy nature we do instead log a exponential
+            # moving average of the validation loss.
+            if len(self._summary["validation_loss"]) == 0:
+                val_loss_ema = val_loss
+            else:
+                previous_loss = self._summary["validation_loss"][-1]
+                val_loss_ema = (
+                    1 - ema_loss_decay
+                ) * previous_loss + ema_loss_decay * val_loss
+
+            self._val_loss = val_loss_ema
             self._summary["validation_loss"].append(self._val_loss)
             self._summary["epoch_durations_sec"].append(time.time() - epoch_start_time)
 
@@ -423,8 +445,9 @@ class NSPE(NeuralInference):
 
         return deepcopy(self._neural_net)
 
-    def _converged(self, epoch: int, stop_after_epochs: int) -> bool:
-        return epoch > stop_after_epochs
+    # def _converged(self, epoch: int, stop_after_epochs: int) -> bool:
+
+    #     return epoch > stop_after_epochs
 
     def build_posterior(
         self,

@@ -321,6 +321,7 @@ class GaussianFourierTimeEmbedding(nn.Module):
         # during optimization and are not trainable.
         self.W = nn.Parameter(torch.randn(embed_dim // 2) * scale, requires_grad=False)
 
-    def forward(self, times):
+    def forward(self, times: Tensor):
         times_proj = times[:, None] * self.W[None, :] * 2 * pi
-        return torch.cat([torch.sin(times_proj), torch.cos(times_proj)], dim=-1)
+        embedding = torch.cat([torch.sin(times_proj), torch.cos(times_proj)], dim=-1)
+        return torch.squeeze(embedding, dim=1)

@@ -12,7 +12,7 @@ from sbi.neural_nets.estimators.score_estimator import (
     VPScoreEstimator,
     subVPScoreEstimator,
 )
-from sbi.utils.sbiutils import standardizing_net, z_score_parser
+from sbi.utils.sbiutils import standardizing_net, z_score_parser, z_standardization
 from sbi.utils.user_input_checks import check_data_device
 
 
@@ -52,12 +52,14 @@ class EmbedInputs(nn.Module):
         assert (
             isinstance(inputs, list) and len(inputs) == 3
         ), """Inputs to network must be a list containing raw theta, x, and 1d time."""
+
+        embeddings = [
+            self.embedding_net_x(inputs[0]),
+            self.embedding_net_y(inputs[1]),
+            self.embedding_net_t(inputs[2]),
+        ]
         out = torch.cat(
-            [
-                self.embedding_net_x(inputs[0]),
-                self.embedding_net_y(inputs[1]),
-                self.embedding_net_t(inputs[2]),
-            ],
+            embeddings,
             dim=1,
         )
         return out
@@ -67,10 +69,11 @@ def build_input_layer(
     batch_x: Tensor,
     batch_y: Tensor,
     t_embedding_dim: int,
-    z_score_x: Optional[str] = "independent",
+    z_score_x: Optional[str] = None,
     z_score_y: Optional[str] = "independent",
     embedding_net_x: nn.Module = nn.Identity(),
     embedding_net_y: nn.Module = nn.Identity(),
+    min_std: float = 1e-4,
 ) -> nn.Module:
     """Builds input layer for vector field regression, including time embedding, and
     optionally z-scores.
@@ -95,6 +98,7 @@ def build_input_layer(
     """
     z_score_x_bool, structured_x = z_score_parser(z_score_x)
     if z_score_x_bool:
+        # TODO remove will move to score_estimator
         embedding_net_x = nn.Sequential(
             standardizing_net(batch_x, structured_x), embedding_net_x
         )
@@ -120,11 +124,11 @@ def build_score_estimator(
     batch_y: Tensor,
     sde_type: Optional[str] = "vp",
     score_net: Optional[Union[str, nn.Module]] = "mlp",
-    z_score_x: Optional[str] = "independent",
+    z_score_x: Optional[str] = None,
     z_score_y: Optional[str] = "independent",
-    t_embedding_dim: int = 16,
+    t_embedding_dim: int = 32,
     num_layers: int = 3,
-    hidden_features: int = 50,
+    hidden_features: int = 100,
     embedding_net_x: nn.Module = nn.Identity(),
     embedding_net_y: nn.Module = nn.Identity(),
     **kwargs,
@@ -169,6 +173,8 @@ def build_score_estimator(
     check_data_device(batch_x, batch_y)
     # check_embedding_net_device(embedding_net=embedding_net_x, datum=batch_y)
     # check_embedding_net_device(embedding_net=embedding_net_y, datum=batch_y)
+
+    mean_0, std_0 = z_standardization(batch_x, z_score_x == "structured")
 
     input_layer = build_input_layer(
         batch_x,

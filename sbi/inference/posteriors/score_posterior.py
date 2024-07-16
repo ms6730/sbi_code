@@ -1,12 +1,12 @@
 # This file is part of sbi, a toolkit for simulation-based inference. sbi is licensed
 # under the Affero General Public License v3, see <https://www.gnu.org/licenses/>.
-from typing import Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import Tensor
 from torch.distributions import Distribution
 
-from sbi.inference.posteriors.base_posterior import NeuralPotentialPosterior
+from sbi.inference.posteriors.base_posterior import NeuralPosterior
 from sbi.inference.potentials.score_based_potential import (
     score_estimator_based_potential_gradient,
 )
@@ -18,7 +18,7 @@ from sbi.sbi_types import Shape
 from sbi.utils import check_prior
 
 
-class ScorePosterior(NeuralPotentialPosterior):
+class ScorePosterior(NeuralPosterior):
     r"""Posterior $p(\theta|x_o)$ with `log_prob()` and `sample()` methods. It samples
     from the diffusion model given the score_estimator and rejects samples that lie
     outside of the prior bounds.
@@ -58,35 +58,38 @@ class ScorePosterior(NeuralPotentialPosterior):
 
         check_prior(prior)
 
-        # TODO Potential_fn gradient?
-        potential_fn, theta_transform = score_estimator_based_potential_gradient(
-            score_estimator=score_estimator,
-            prior=prior,
-            x_o=None,
-        )
-
         super().__init__(
-            potential_fn=potential_fn,
-            theta_transform=theta_transform,
             device=device,
             x_shape=x_shape,
         )
 
+        potential_fn_gradient, theta_transform = (
+            score_estimator_based_potential_gradient(
+                score_estimator=score_estimator,
+                prior=prior,
+                x_o=None,
+                enable_transform=enable_transform,
+            )
+        )
+
+        device = device if device is not None else potential_fn_gradient.device
+
         self.prior = prior
         self.score_estimator = score_estimator
+        self.potential_fn_gradient = potential_fn_gradient
+        self.theta_transform = theta_transform
 
         self.max_sampling_batch_size = max_sampling_batch_size
 
         self._purpose = """It samples from the diffusion model given the \
-            score_estimator and rejects samples that
-            lie outside of the prior bounds."""
+            score_estimator."""
 
     def sample(
         self,
         sample_shape: Shape = torch.Size(),
         x: Optional[Tensor] = None,
         predictor: Union[str, Predictor] = "euler_maruyma",
-        corrector: Optional[Union[str, Corrector, Callable]] = None,
+        corrector: Optional[Union[str, Corrector]] = None,
         steps: int = 500,
         max_sampling_batch_size: int = 10_000,
         sample_with: Optional[str] = None,
@@ -110,7 +113,7 @@ class ScorePosterior(NeuralPotentialPosterior):
         # condition_shape = self.score_estimator._condition_shape
 
         x = self._x_else_default_x(x)
-        self.potential_fn.set_x(x)  # TODO Fix when new batching rules are in
+        self.potential_fn_gradient.set_x(x)  # TODO Fix when new batching rules are in
 
         max_sampling_batch_size = (
             self.max_sampling_batch_size
@@ -130,7 +133,9 @@ class ScorePosterior(NeuralPotentialPosterior):
         ts = torch.linspace(T_max, T_min, steps)
 
         # TODO: Use `method` to select the correct sampler
-        diffuser = Diffuser(self.potential_fn, predictor=predictor, corrector=corrector)
+        diffuser = Diffuser(
+            self.potential_fn_gradient, predictor=predictor, corrector=corrector
+        )
         samples = diffuser.run(
             num_samples=num_samples, ts=ts, show_progress_bars=show_progress_bars
         )

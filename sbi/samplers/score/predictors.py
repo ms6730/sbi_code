@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Callable
+from typing import Callable, Optional
 
 import torch
 from torch import Tensor
@@ -63,11 +63,12 @@ class EulerMaruyama(Predictor):
         return theta - f_backward * dt + g_backward * torch.randn_like(theta) * dt_sqrt
 
 
+@register_predictor("ddim")
 class DDIM(Predictor):
     def __init__(
         self,
         score_fn: ScoreBasedPotential,
-        std_bridge: Callable = lambda t: t,
+        std_bridge: Optional[Callable] = None,
         eta: float = 1.0,
     ):
         super().__init__(score_fn)
@@ -78,14 +79,19 @@ class DDIM(Predictor):
 
     @torch.compile(fullgraph=True, dynamic=True)
     def predict(self, theta: Tensor, t1: Tensor, t0: Tensor) -> Tensor:
-        # dt = t1 - t0
-        # dt_sqrt = torch.sqrt(dt)
+        # TODO Check correctness
         alpha = self.alpha_fn(t1)
         std = self.std_fn(t1)
         alpha_new = self.alpha_fn(t0)
         std_new = self.std_fn(t0)
-        std_bridge = self.std_bridge(t0)
-        score = self.score_fn(theta, t0)
+
+        if self.std_bridge is not None:
+            std_bridge = self.std_bridge(t0)
+        else:
+            std_bridge = self.eta * torch.sqrt(
+                (std_new / std) * (1 - alpha**2 / alpha_new**2)
+            )
+        score = self.score_fn(theta, t1)
         eps_pred = -std * score
 
         x0_pred = (theta - std * eps_pred) / alpha

@@ -8,7 +8,7 @@ from torch.distributions import Distribution
 
 from sbi.inference.posteriors.base_posterior import NeuralPotentialPosterior
 from sbi.inference.potentials.score_based_potential import (
-    score_estimator_based_potential,
+    score_estimator_based_potential_gradient,
 )
 from sbi.neural_nets.estimators.score_estimator import ConditionalScoreEstimator
 from sbi.samplers.score.correctors import Corrector
@@ -59,11 +59,10 @@ class ScorePosterior(NeuralPotentialPosterior):
         check_prior(prior)
 
         # TODO Potential_fn gradient?
-        potential_fn, theta_transform = score_estimator_based_potential(
+        potential_fn, theta_transform = score_estimator_based_potential_gradient(
             score_estimator=score_estimator,
             prior=prior,
             x_o=None,
-            x_o_shape=x_shape,
         )
 
         super().__init__(

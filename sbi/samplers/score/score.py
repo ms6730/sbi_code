@@ -1,6 +1,4 @@
-import inspect
-from math import sqrt
-from typing import Any, Callable, Optional, Union
+from typing import Optional, Union
 
 import torch
 from torch import Tensor
@@ -13,12 +11,14 @@ from sbi.samplers.score.predictors import Predictor, get_predictor
 
 class Diffuser:
     predictor: Predictor
+    corrector: Optional[Corrector]
 
     def __init__(
         self,
         score_based_potential: ScoreBasedPotential,
         predictor: Union[str, Predictor],
-        corrector: Optional[Union[str, Predictor, Callable]] = None,
+        corrector: Optional[Union[str, Corrector]] = None,
+        init_std_scale: float = 1.0,
     ):
         self.set_predictor(predictor, score_based_potential)
         self.set_corrector(corrector)
@@ -30,7 +30,7 @@ class Diffuser:
 
         # Extract initial moments
         self.init_mean = score_based_potential.score_estimator.mean_T
-        self.init_std = score_based_potential.score_estimator.std_T
+        self.init_std = init_std_scale * score_based_potential.score_estimator.std_T
 
         # Extract relevant shapes from the score function
         self.input_shape = score_based_potential.score_estimator.input_shape
@@ -48,20 +48,13 @@ class Diffuser:
         else:
             self.predictor = predictor
 
-    def set_corrector(self, corrector: Optional[Union[str, Corrector, Callable]]):
+    def set_corrector(self, corrector: Optional[Union[str, Corrector]]):
         if corrector is None:
             self.corrector = None
-        elif isinstance(corrector, str):
-            self.corrector = get_corrector(corrector)
-        else:
+        elif isinstance(corrector, Corrector):
             self.corrector = corrector
-            # Inspect that the corrector has the correct signature
-            signature = inspect.signature(corrector.correct)
-            # 2 arguments are expected: theta, t0
-            assert len(signature.parameters) == 2, (
-                "The corrector must have the signature "
-                "`correct(self, theta: Tensor, t0: Tensor) -> Tensor`."
-            )
+        else:
+            self.corrector = get_corrector(corrector, self.predictor)
 
     def initialize(self, num_samples: int) -> Tensor:
         num_batch = self.batch_shape.numel()
@@ -86,53 +79,3 @@ class Diffuser:
             if self.corrector is not None:
                 theta = self.corrector(theta, t0)
         return theta
-
-
-@torch.no_grad()
-def score_based_sampler(
-    score_based_potential: ScoreBasedPotential,
-    proposal: Any,
-    drift: Callable,
-    diffusion: Callable,
-    ts: torch.Tensor,
-    dim_theta: int,
-    num_samples: int = 1,
-    show_progress_bars: bool = True,
-):
-    r"""Returns a sampler for score-based methods.
-
-    Args:
-        score_based_potential: The score-based potential function.
-        proposal: The proposal (noise) distribution .
-        drift: The drift function of the SDE.
-        diffusion: The diffusion function of the SDE.
-
-    Returns:
-        A sampler for score-based methods.
-    """
-    iid2, batch, condition_shape = score_based_potential.x_o.shape
-    sample_shape = (num_samples, batch)
-    theta = proposal.sample(sample_shape)
-    delta_t = 1 / ts.numel()
-    delta_t_sqrt = sqrt(delta_t)
-    pbar = tqdm(
-        ts,
-        disable=not show_progress_bars,
-        desc=f"Drawing {num_samples} posterior samples",
-    )
-    shape = theta.shape
-
-    for t in pbar:
-        f = drift(theta, t)
-        g = diffusion(theta, t)
-        score = score_based_potential(theta, t)
-
-        theta = (
-            theta
-            - (f - g**2 * score) * delta_t
-            + g * torch.randn(sample_shape + (dim_theta,)) * delta_t_sqrt
-        )
-
-        theta.reshape(shape)
-
-    return theta

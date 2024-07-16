@@ -13,11 +13,10 @@ from sbi.sbi_types import TorchTransform
 from sbi.utils import mcmc_transform
 
 
-def score_estimator_based_potential(
+def score_estimator_based_potential_gradient(
     score_estimator: ConditionalScoreEstimator,
     prior: Distribution,
     x_o: Optional[Tensor],
-    x_o_shape: Optional[Tuple[int, ...]] = None,
     enable_transform: bool = False,
 ) -> Tuple[Callable, TorchTransform]:
     r"""Returns the potential function for score estimators.
@@ -32,14 +31,15 @@ def score_estimator_based_potential(
     """
     device = str(next(score_estimator.parameters()).device)
 
-    potential_fn = ScoreBasedPotential(
-        score_estimator, prior, x_o, x_o_shape, device=device
-    )
+    potential_fn = ScoreBasedPotential(score_estimator, prior, x_o, device=device)
 
     assert (
         enable_transform is False
-    ), "Transforms are not yet supported for score estimators."
-    theta_transform = mcmc_transform(prior, device=device, enable_transform=False)
+    ), "Transforms are not yet supported for score estimators. (TODO: ADD ISSUE)"
+
+    theta_transform = mcmc_transform(
+        prior, device=device, enable_transform=enable_transform
+    )
 
     return potential_fn, theta_transform
 

@@ -18,9 +18,6 @@ from sbi.inference.posteriors import (
 )
 from sbi.inference.posteriors.base_posterior import NeuralPotentialPosterior
 from sbi.inference.posteriors.score_posterior import ScorePosterior
-from sbi.inference.potentials.score_based_potential import (
-    score_estimator_based_potential_gradient,
-)
 from sbi.neural_nets.estimators.score_estimator import ConditionalScoreEstimator
 from sbi.neural_nets.factory import posterior_score_nn
 from sbi.utils import (
@@ -511,12 +508,6 @@ class NSPE(NeuralInference):
             score_estimator = score_estimator
             # Otherwise, infer it from the device of the net parameters.
         # device = next(score_estimator.parameters()).device.type
-
-        potential_fn, theta_transform = score_estimator_based_potential_gradient(
-            score_estimator=score_estimator,  # type: ignore
-            prior=prior,
-            x_o=None,
-        )
 
         if sample_with == "ode":
             raise NotImplementedError("ODE-based sampling is not yet implemented.")

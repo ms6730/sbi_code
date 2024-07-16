@@ -26,6 +26,11 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
     - Score-based generative modeling through SDE: https://arxiv.org/abs/2011.13456
     - Denoising diffusion probabilistic models: https://arxiv.org/abs/2006.11239
     - Noise conditional score networks: https://arxiv.org/abs/1907.05600
+
+    NOTE: This will follow the "noise matching" approach, we could also train a
+    "denoising" network aiming to predict the original input given the noised input. We
+    can still approx. the score by Tweedie's formula, but training might be easier.
+    Ideally, both should be supported.
     """
 
     def __init__(
@@ -83,29 +88,37 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
         Returns:
             Score (gradient of the density) at a given time, matches input shape.
         """
+        batch_shape = torch.broadcast_shapes(
+            input.shape[: -len(self.input_shape)],
+            condition.shape[: -len(self.condition_shape)],
+        )
 
-        if time.shape.numel() == 1:
-            # Repeat to match input shape (of any dimension).
-            time = time * torch.ones(input.shape[: -len(self.input_shape)])
+        input = torch.broadcast_to(input, batch_shape + self.input_shape)
+        condition = torch.broadcast_to(condition, batch_shape + self.condition_shape)
+        time = torch.broadcast_to(time, batch_shape)
 
+        # Time dependent mean and std of the target distribution to z-score the input
+        # and to approximate the score at the end of the diffusion.
         mean = self.approx_marginal_mean(time)
         std = self.approx_marginal_std(time)
+
         # As input to the neural net we want to have something that changes proportianl
         # to how the scores change
         time_enc = self.std_fn(time)
 
         # Time dependent z-scoring! Keeps input at similar scales
         input_enc = (input - mean) / std
-        input_enc, condition_enc = torch.broadcast_tensors(input_enc, condition)
 
         # Approximate score becoming exact for t -> T_max, "skip connection"
         score_gaussian = (input - mean) / std**2
 
         # Score prediction by the network
-        score_pred = self.net([input_enc, condition_enc, time_enc])
-        score_pred = score_pred / torch.clip(self.std_fn(time), 1e-3)
+        score_pred = self.net([input_enc, condition, time_enc])
 
         # Output pre-conditioned score
+        # The learnable part will be largly scaled at the beginning of the diffusion
+        # and the gaussian part (where it should end up) will dominate at the end of
+        # the diffusion.
         output_score = (
             self.mean_t_fn(time) / self.std_fn(time) * score_pred + score_gaussian
         )
@@ -127,8 +140,13 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
         input.
 
         Args:
-            input: Original data, x0.
+            input: Input variable i.e. theta.
             condition: Conditioning variable.
+            times: SDE time variable in [T_min, T_max]. Uniformly sampled if None.
+            control_variate: Whether to use a control variate to reduce the variance of
+                the stochastic loss estimator.
+            control_variate_threshold: Threshold for the control variate. If the std
+                exceeds this threshold, the control variate is not used.
 
         Returns:
             MSE between target score and network output, scaled by the weight function.
@@ -178,7 +196,7 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
         # For large std the Taylor expansion will be bad and the control variate will
         # only loosely correlate with the objective, hence could potentially increase
         # the variance of the estimator.
-        # Proposed in https://arxiv.org/pdf/2101.03288
+        # Proposed in https://arxiv.org/pdf/2101.03288  (works very well for small std)
 
         if control_variate:
             D = input.shape[-1]

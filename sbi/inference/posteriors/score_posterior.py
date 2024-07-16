@@ -11,6 +11,7 @@ from sbi.inference.potentials.score_based_potential import (
     score_estimator_based_potential_gradient,
 )
 from sbi.neural_nets.estimators.score_estimator import ConditionalScoreEstimator
+from sbi.neural_nets.estimators.shape_handling import reshape_to_batch_event
 from sbi.samplers.score.correctors import Corrector
 from sbi.samplers.score.predictors import Predictor
 from sbi.samplers.score.score import Diffuser
@@ -39,7 +40,7 @@ class ScorePosterior(NeuralPosterior):
         max_sampling_batch_size: int = 10_000,
         device: Optional[str] = None,
         x_shape: Optional[torch.Size] = None,
-        enable_transform: bool = True,  # ???
+        enable_transform: bool = False,  # NOTE: True not supported yet
     ):
         """
         Args:
@@ -113,6 +114,7 @@ class ScorePosterior(NeuralPosterior):
         # condition_shape = self.score_estimator._condition_shape
 
         x = self._x_else_default_x(x)
+        x = reshape_to_batch_event(x, self.score_estimator.condition_shape)
         self.potential_fn_gradient.set_x(x)  # TODO Fix when new batching rules are in
 
         max_sampling_batch_size = (
@@ -241,42 +243,11 @@ class ScorePosterior(NeuralPosterior):
         Returns:
             The MAP estimate.
         """
-        super().map(
-            x=x,
-            num_iter=num_iter,
-            num_to_optimize=num_to_optimize,
-            learning_rate=learning_rate,
-            init_method=init_method,
-            num_init_samples=num_init_samples,
-            save_best_every=save_best_every,
-            show_progress_bars=show_progress_bars,
-            force_update=force_update,
-        )
-
-    def _calculate_map(
-        self,
-        num_iter: int = 1_000,
-        num_to_optimize: int = 100,
-        learning_rate: float = 0.01,
-        init_method: Union[str, Tensor] = "posterior",
-        num_init_samples: int = 1_000,
-        save_best_every: int = 10,
-        show_progress_bars: bool = False,
-    ) -> Tensor:
-        """Calculates the maximum-a-posteriori estimate (MAP).
-
-        See `map()` method of child classes for docstring.
-        """
-
-        # if init_method == "posterior":
-        #     inits = self.sample((num_init_samples,))
-        # elif init_method == "proposal":
-        #     inits = self.proposal.sample((num_init_samples,))  # type: ignore
-        # elif isinstance(init_method, Tensor):
-        #     inits = init_method
-        # else:
-        #     raise ValueError
 
         # TODO: Implement MAP optimization using the score estimator directly!
+
+        # init_method: Just sample from the posterior
+        # iteratively: Use score at T_min to update theta via gradient ascent
+        # Choose the best theta after num_iter iterations (would need log_prob...)
 
         raise NotImplementedError("MAP optimization is not implemented yet.")

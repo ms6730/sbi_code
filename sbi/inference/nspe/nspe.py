@@ -16,7 +16,7 @@ from sbi.inference import NeuralInference, check_if_proposal_has_default_x
 from sbi.inference.posteriors import (
     DirectPosterior,
 )
-from sbi.inference.posteriors.base_posterior import NeuralPosterior
+from sbi.inference.posteriors.base_posterior import NeuralPotentialPosterior
 from sbi.inference.posteriors.score_posterior import ScorePosterior
 from sbi.inference.potentials.score_based_potential import (
     score_estimator_based_potential,
@@ -593,7 +593,7 @@ class NSPE(NeuralInference):
                         stacklevel=2,
                     )
             elif (
-                not isinstance(proposal, NeuralPosterior)
+                not isinstance(proposal, NeuralPotentialPosterior)
                 and proposal is not self._prior
             ):
                 warn(

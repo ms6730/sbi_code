@@ -13,7 +13,7 @@ from sbi.sbi_types import TorchTransform
 from sbi.utils import mcmc_transform
 
 
-def score_estimator_based_potential_grad(
+def score_estimator_based_potential(
     score_estimator: ConditionalScoreEstimator,
     prior: Distribution,
     x_o: Optional[Tensor],

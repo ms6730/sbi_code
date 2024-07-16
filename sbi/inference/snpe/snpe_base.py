@@ -20,7 +20,7 @@ from sbi.inference.posteriors import (
     RejectionPosterior,
     VIPosterior,
 )
-from sbi.inference.posteriors.base_posterior import NeuralPosterior
+from sbi.inference.posteriors.base_posterior import NeuralPotentialPosterior
 from sbi.inference.posteriors.importance_posterior import ImportanceSamplingPosterior
 from sbi.inference.potentials import posterior_estimator_based_potential
 from sbi.neural_nets import ConditionalDensityEstimator, posterior_nn
@@ -629,7 +629,7 @@ class PosteriorEstimator(NeuralInference, ABC):
                         stacklevel=2,
                     )
             elif (
-                not isinstance(proposal, NeuralPosterior)
+                not isinstance(proposal, NeuralPotentialPosterior)
                 and proposal is not self._prior
             ):
                 warn(

@@ -7,13 +7,13 @@ import torch
 from torch import Tensor
 from torch.distributions import Distribution
 
-from sbi.inference.potentials.base_potential import BasePotential
+from sbi.inference.potentials.base_potential import BasePotentialGradient
 from sbi.neural_nets.estimators.score_estimator import ConditionalScoreEstimator
 from sbi.sbi_types import TorchTransform
 from sbi.utils import mcmc_transform
 
 
-def score_estimator_based_potential(
+def score_estimator_based_potential_grad(
     score_estimator: ConditionalScoreEstimator,
     prior: Distribution,
     x_o: Optional[Tensor],
@@ -44,7 +44,7 @@ def score_estimator_based_potential(
     return potential_fn, theta_transform
 
 
-class ScoreBasedPotential(BasePotential):
+class ScoreBasedPotential(BasePotentialGradient):
     allow_iid_x = True  # type: ignore
 
     def __init__(
@@ -90,31 +90,37 @@ class ScoreBasedPotential(BasePotential):
 
         # (batch, *event)[1:] == event?
         # If no, multiple iid observations are are present.
-        if self.x_o.shape[1:] == self.x_o_shape:
-            score_trial_sum = self.score_estimator.forward(
-                input=theta, condition=self.x_o, time=diffusion_time
-            )
-        else:
-            if self.prior is None:
-                raise ValueError(
-                    "No observed data prior is available. Please reinitialize \
-                    the potential or manually set the prior."
-                )
-            if self.x_o_shape is None:
-                raise ValueError(
-                    "No observed data shape is available. Please reinitialize \
-                    the potential or manually set the shape."
-                )
 
-            score_trial_sum = _bridge(
-                x=self.x_o,
-                x_shape=self.x_o_shape,
-                theta=theta.to(self.device),
-                estimator=self.score_estimator,
-                diffusion_time=diffusion_time,
-                prior=self.prior,
-                track_gradients=track_gradients,
-            )
+        score_trial_sum = self.score_estimator.forward(
+            input=theta, condition=self.x_o, time=diffusion_time
+        )
+        # TODO: Implement multiple iid observations when potential is changed by Guy
+
+        # if self.x_o.shape[1:] == self.x_o_shape:
+        #     score_trial_sum = self.score_estimator.forward(
+        #         input=theta, condition=self.x_o, time=diffusion_time
+        #     )
+        # else:
+        #     if self.prior is None:
+        #         raise ValueError(
+        #             "No observed data prior is available. Please reinitialize \
+        #             the potential or manually set the prior."
+        #         )
+        #     if self.x_o_shape is None:
+        #         raise ValueError(
+        #             "No observed data shape is available. Please reinitialize \
+        #             the potential or manually set the shape."
+        #         )
+
+        #     score_trial_sum = _bridge(
+        #         x=self.x_o,
+        #         x_shape=self.x_o_shape,
+        #         theta=theta.to(self.device),
+        #         estimator=self.score_estimator,
+        #         diffusion_time=diffusion_time,
+        #         prior=self.prior,
+        #         track_gradients=track_gradients,
+        #     )
 
         return score_trial_sum
 

@@ -1,5 +1,5 @@
 import math
-from typing import Callable, Union
+from typing import Callable, Optional, Union
 
 import torch
 from torch import Tensor, nn
@@ -85,8 +85,8 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
         """
 
         if time.shape.numel() == 1:
-            time = torch.repeat_interleave(time[None], input.shape[0], dim=0)
-            time = time.reshape((input.shape[0],))
+            # Repeat to match input shape (of any dimension).
+            time = time * torch.ones(input.shape[: -len(self.input_shape)])
 
         mean = self.approx_marginal_mean(time)
         std = self.approx_marginal_std(time)
@@ -95,33 +95,28 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
         time_enc = self.std_fn(time)
 
         # Time dependent z-scoring! Keeps input at similar scales
-        input_shape = input.shape
-        input = input.reshape((-1, input.shape[-1]))
         input_enc = (input - mean) / std
-        # Condition (Z-scoring optionally managed by net)
-        condition = condition.reshape(-1, condition.shape[-1])
-        condition = torch.repeat_interleave(
-            condition, input.shape[0] // condition.shape[0], dim=0
-        )
+        input_enc, condition_enc = torch.broadcast_tensors(input_enc, condition)
 
         # Approximate score becoming exact for t -> T_max, "skip connection"
         score_gaussian = (input - mean) / std**2
 
         # Score prediction by the network
-        score_pred = self.net([input_enc, condition, time_enc])
+        score_pred = self.net([input_enc, condition_enc, time_enc])
         score_pred = score_pred / torch.clip(self.std_fn(time), 1e-3)
 
         # Output pre-conditioned score
-        t = time[..., None]
-        output_score = (1 - t) * score_pred + t * score_gaussian
-        # Note maybe make it score_gaussian + mean_t * score_pred
+        output_score = (
+            self.mean_t_fn(time) / self.std_fn(time) * score_pred + score_gaussian
+        )
 
-        return output_score.reshape(input_shape)
+        return output_score
 
     def loss(
         self,
         input: Tensor,
         condition: Tensor,
+        times: Optional[Tensor] = None,
         control_variate=True,
         control_variate_threshold=torch.inf,
     ) -> Tensor:
@@ -140,7 +135,8 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
 
         """
         # Sample diffusion times.
-        times = torch.rand(input.shape[0]) * (self.T_max - self.T_min) + self.T_min
+        if times is None:
+            times = torch.rand(input.shape[0]) * (self.T_max - self.T_min) + self.T_min
 
         # Sample noise.
         eps = torch.randn_like(input)

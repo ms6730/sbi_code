@@ -60,7 +60,7 @@ class EmbedInputs(nn.Module):
         ]
         out = torch.cat(
             embeddings,
-            dim=1,
+            dim=-1,
         )
         return out
 

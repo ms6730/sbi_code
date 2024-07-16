@@ -1,6 +1,6 @@
 # This file is part of sbi, a toolkit for simulation-based inference. sbi is licensed
 # under the Affero General Public License v3, see <https://www.gnu.org/licenses/>.
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 import torch
 from torch import Tensor
@@ -8,10 +8,12 @@ from torch.distributions import Distribution
 
 from sbi.inference.posteriors.base_posterior import NeuralPosterior
 from sbi.inference.potentials.score_based_potential import (
-    score_estimator_based_potential,
+    score_estimator_based_potential_grad,
 )
 from sbi.neural_nets.estimators.score_estimator import ConditionalScoreEstimator
-from sbi.samplers.score.score import score_based_sampler
+from sbi.samplers.score.correctors import Corrector
+from sbi.samplers.score.predictors import Predictor
+from sbi.samplers.score.score import Diffuser
 from sbi.sbi_types import Shape
 from sbi.utils import check_prior
 
@@ -55,7 +57,9 @@ class ScorePosterior(NeuralPosterior):
         """
 
         check_prior(prior)
-        potential_fn, theta_transform = score_estimator_based_potential(
+
+        # TODO Potential_fn gradient?
+        potential_fn, theta_transform = score_estimator_based_potential_grad(
             score_estimator=score_estimator,
             prior=prior,
             x_o=None,
@@ -82,7 +86,8 @@ class ScorePosterior(NeuralPosterior):
         self,
         sample_shape: Shape = torch.Size(),
         x: Optional[Tensor] = None,
-        method: str = "euler_maruyma",
+        predictor: Union[str, Predictor] = "euler_maruyma",
+        corrector: Optional[Union[str, Corrector, Callable]] = None,
         steps: int = 500,
         max_sampling_batch_size: int = 10_000,
         sample_with: Optional[str] = None,
@@ -106,9 +111,7 @@ class ScorePosterior(NeuralPosterior):
         # condition_shape = self.score_estimator._condition_shape
 
         x = self._x_else_default_x(x)
-        self.potential_fn.set_x(
-            x.unsqueeze(0)
-        )  # TODO Fix when new batching rules are in
+        self.potential_fn.set_x(x)  # TODO Fix when new batching rules are in
 
         max_sampling_batch_size = (
             self.max_sampling_batch_size
@@ -123,44 +126,15 @@ class ScorePosterior(NeuralPosterior):
                 f"`.build_posterior(sample_with={sample_with}).`"
             )
 
-        # TODO: Prior can be `None` (extract from score estimator)
-        theta_dim = self.prior.event_shape.numel()
-
-        mean_T = torch.squeeze(self.score_estimator.mean_T) * torch.ones(
-            self.score_estimator._input_shape
-        )
-        std_T = torch.squeeze(self.score_estimator.std_T) * torch.ones(
-            self.score_estimator._input_shape
-        )
-        proposal = torch.distributions.Normal(
-            mean_T, std_T
-        )  # TODO This must be extracted from the score estimator (can be different!)
-
         T_max = self.score_estimator.T_max
         T_min = self.score_estimator.T_min
         ts = torch.linspace(T_max, T_min, steps)
 
         # TODO: Use `method` to select the correct sampler
-        samples = score_based_sampler(
-            score_based_potential=self.potential_fn,  # type: ignore
-            proposal=proposal,
-            drift=self.score_estimator.drift_fn,
-            diffusion=self.score_estimator.diffusion_fn,
-            ts=ts,
-            dim_theta=theta_dim,
-            num_samples=num_samples,
+        diffuser = Diffuser(self.potential_fn, predictor=predictor, corrector=corrector)
+        samples = diffuser.run(
+            num_samples=num_samples, ts=ts, show_progress_bars=show_progress_bars
         )
-
-        # TODO: Implement accept-reject sampling ?
-        # samples = accept_reject_sample(
-        #     proposal=proposal,  # type Union[nn.module, Distribution, NeuralPosterior]
-        #     accept_reject_fn=lambda theta: within_support(self.prior, theta),
-        #     num_samples=num_samples,
-        #     show_progress_bars=show_progress_bars,
-        #     max_sampling_batch_size=max_sampling_batch_size,
-        #     proposal_sampling_kwargs={"condition": x},
-        #     alternative_method="build_posterior(..., sample_with='mcmc')",
-        # )[0]
 
         return samples.reshape(sample_shape + self.prior.event_shape)
 

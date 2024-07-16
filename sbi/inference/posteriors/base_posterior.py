@@ -12,6 +12,7 @@ from torch import Tensor
 
 from sbi.inference.potentials.base_potential import (
     BasePotential,
+    BasePotentialGradient,
     CallablePotentialWrapper,
 )
 from sbi.sbi_types import Array, Shape, TorchTransform
@@ -52,7 +53,9 @@ class NeuralPosterior(ABC):
                 stacklevel=2,
             )
 
-        if not isinstance(potential_fn, BasePotential):
+        if not isinstance(potential_fn, BasePotential) or not isinstance(
+            potential_fn, BasePotentialGradient
+        ):
             kwargs_of_callable = list(inspect.signature(potential_fn).parameters.keys())
             for key in ["theta", "x_o"]:
                 assert key in kwargs_of_callable, (

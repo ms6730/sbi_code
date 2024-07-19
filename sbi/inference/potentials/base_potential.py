@@ -78,7 +78,7 @@ class BasePotentialGradient(BasePotential):
         device: str = "cpu",
     ):
         """Conceptually the same as `BasePotential`, but does not return a scalar
-        potential value, but the gradient of the potential function.
+        potential value, but the gradient of a scalar potential function.
 
         Args:
             prior: Prior distribution.

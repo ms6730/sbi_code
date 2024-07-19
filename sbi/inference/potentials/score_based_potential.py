@@ -19,23 +19,23 @@ def score_estimator_based_potential_gradient(
     x_o: Optional[Tensor],
     enable_transform: bool = False,
 ) -> Tuple[Callable, TorchTransform]:
-    r"""Returns the potential function for score estimators.
+    r"""Returns the potential function gradient for score estimators.
 
     Args:
         score_estimator: The neural network modelling the score.
         prior: The prior distribution.
         x_o: The observed data at which to evaluate the score.
-        x_o_shape: The shape of the observed data.
         enable_transform: Whether to enable transforms. Not supported yet.
 
     """
     device = str(next(score_estimator.parameters()).device)
 
-    potential_fn = ScoreBasedPotential(score_estimator, prior, x_o, device=device)
+    potential_fn = ScoreFunction(score_estimator, prior, x_o, device=device)
 
+    # TODO Add issue
     assert (
         enable_transform is False
-    ), "Transforms are not yet supported for score estimators. (TODO: ADD ISSUE)"
+    ), "Transforms are not yet supported for score estimators."
 
     theta_transform = mcmc_transform(
         prior, device=device, enable_transform=enable_transform
@@ -44,15 +44,14 @@ def score_estimator_based_potential_gradient(
     return potential_fn, theta_transform
 
 
-class ScoreBasedPotential(BasePotentialGradient):
-    allow_iid_x = True  # type: ignore
-
+class ScoreFunction(BasePotentialGradient):
     def __init__(
         self,
         score_estimator: ConditionalScoreEstimator,
         prior: Optional[Distribution],
         x_o: Optional[Tensor],
-        x_o_shape: Optional[Tuple[int, ...]] = None,
+        interpret_as_iid: bool = False,
+        iid_method: str = "geffner",
         device: str = "cpu",
     ):
         r"""Returns the score function for score-based methods.
@@ -67,12 +66,18 @@ class ScoreBasedPotential(BasePotentialGradient):
 
         super().__init__(prior, x_o, device=device)
         self.score_estimator = score_estimator
-        self.x_o_shape = x_o_shape
+        self.score_estimator.eval()
+        self.interpret_as_iid = interpret_as_iid  # TODO: Replace with what Guy did
+        self.iid_method = iid_method
+
+    def allow_iid_x(self) -> bool:
+        # TODO: Implement multiple iid observations when potential is changed by Guy
+        return True
 
     def __call__(
-        self, theta: Tensor, diffusion_time: Tensor, track_gradients: bool = True
+        self, theta: Tensor, time: Tensor, track_gradients: bool = True
     ) -> Tensor:
-        r"""Returns the potential function for score-based methods.
+        r"""Returns the potential function gradient for score-based methods.
 
         Args:
             theta: The parameters at which to evaluate the potential.
@@ -88,87 +93,70 @@ class ScoreBasedPotential(BasePotentialGradient):
                 the potential or manually set self._x_o."
             )
 
-        # (batch, *event)[1:] == event?
-        # If no, multiple iid observations are are present.
+        with torch.set_grad_enabled(track_gradients):
+            if not self.interpret_as_iid:
+                score = self.score_estimator.forward(
+                    input=theta, condition=self.x_o, time=time
+                )
+            else:
+                if self.prior is None:
+                    raise ValueError(
+                        "Prior must be provided when interpreting the data as IID."
+                    )
 
-        score_trial_sum = self.score_estimator.forward(
-            input=theta, condition=self.x_o, time=diffusion_time
-        )
-        # TODO: Implement multiple iid observations when potential is changed by Guy
+                if self.iid_method == "geffner":
+                    score = _iid_bridge(
+                        theta=theta,
+                        xos=self.x_o,
+                        time=time,
+                        score_estimator=self.score_estimator,
+                        prior=self.prior,
+                    )
+                else:
+                    raise NotImplementedError(
+                        f"Method {self.iid_method} not implemented."
+                    )
 
-        # if self.x_o.shape[1:] == self.x_o_shape:
-        #     score_trial_sum = self.score_estimator.forward(
-        #         input=theta, condition=self.x_o, time=diffusion_time
-        #     )
-        # else:
-        #     if self.prior is None:
-        #         raise ValueError(
-        #             "No observed data prior is available. Please reinitialize \
-        #             the potential or manually set the prior."
-        #         )
-        #     if self.x_o_shape is None:
-        #         raise ValueError(
-        #             "No observed data shape is available. Please reinitialize \
-        #             the potential or manually set the shape."
-        #         )
-
-        #     score_trial_sum = _bridge(
-        #         x=self.x_o,
-        #         x_shape=self.x_o_shape,
-        #         theta=theta.to(self.device),
-        #         estimator=self.score_estimator,
-        #         diffusion_time=diffusion_time,
-        #         prior=self.prior,
-        #         track_gradients=track_gradients,
-        #     )
-
-        return score_trial_sum
+        return score
 
 
-def _bridge(
-    x: Tensor,
-    x_shape: Tuple[int, ...],
+def _iid_bridge(
     theta: Tensor,
-    estimator: ConditionalScoreEstimator,
-    diffusion_time: Tensor,
+    xos: Tensor,
+    time: Tensor,
+    score_estimator: ConditionalScoreEstimator,
     prior: Distribution,
-    track_gradients: bool = False,
 ):
     r"""
     Returns the score-based potential for multiple IID observations. This can require a
     special solver to obtain the correct tall posterior.
 
     Args:
-        x: The observed data.
-        x_shape: The shape of the observed data.
-        theta: The parameters at which to evaluate the potential.
-        estimator: The neural network modelling the score.
-        diffusion_time: The diffusion time.
+        input: The parameter values at which to evaluate the potential.
+        condition: The observed data at which to evaluate the potential.
+        time: The diffusion time.
+        score_estimator: The neural network modelling the score.
         prior: The prior distribution.
-        track_gradients: Whether to track gradients.
     """
 
     assert (
-        next(estimator.parameters()).device == x.device and x.device == theta.device
+        next(score_estimator.parameters()).device == xos.device
+        and xos.device == theta.device
     ), f"""device mismatch: estimator, x, theta: \
-        {next(estimator.parameters()).device}, {x.device},
+        {next(score_estimator.parameters()).device}, {xos.device},
         {theta.device}."""
 
     # Get number of observations which are left from event_shape if they exist.
-    num_obs = x.shape[-len(x_shape) - 1]
+    condition_shape = score_estimator.condition_shape
+    num_obs = xos.shape[-len(condition_shape) - 1]
 
     # Calculate likelihood in one batch.
-    # TODO needs to conform with the new shape handling
-    with torch.set_grad_enabled(track_gradients):
-        score_trial_batch = estimator.forward(
-            input=theta, condition=x, time=diffusion_time
-        )
 
-        score_trial_sum = score_trial_batch.sum(0)
+    score_trial_batch = score_estimator.forward(input=theta, condition=xos, time=time)
 
-    return score_trial_sum + _get_prior_contribution(
-        diffusion_time, prior, theta, num_obs
-    )
+    score_trial_sum = score_trial_batch.sum(0)
+
+    return score_trial_sum + _get_prior_contribution(time, prior, theta, num_obs)
 
 
 def _get_prior_contribution(

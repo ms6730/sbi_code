@@ -4,7 +4,7 @@ from typing import Callable, Optional, Type
 import torch
 from torch import Tensor
 
-from sbi.inference.potentials.score_based_potential import ScoreBasedPotential
+from sbi.inference.potentials.score_based_potential import ScoreFunction
 from sbi.neural_nets.estimators.score_estimator import (
     VEScoreEstimator,
 )
@@ -13,7 +13,7 @@ PREDICTORS = {}
 
 
 def get_predictor(
-    name: str, score_based_potential: ScoreBasedPotential, **kwargs
+    name: str, score_based_potential: ScoreFunction, **kwargs
 ) -> "Predictor":
     """Helper function to get predictor by name.
 
@@ -47,7 +47,7 @@ def register_predictor(name: str) -> Callable:
 class Predictor(ABC):
     def __init__(
         self,
-        score_fn: ScoreBasedPotential,
+        score_fn: ScoreFunction,
     ):
         self.score_fn = score_fn
         self.device = score_fn.device
@@ -68,7 +68,7 @@ class Predictor(ABC):
 class EulerMaruyama(Predictor):
     def __init__(
         self,
-        score_fn: ScoreBasedPotential,
+        score_fn: ScoreFunction,
         eta: float = 1.0,
     ):
         """Simple Euler-Maruyama discretization of the associated family of reverse
@@ -110,7 +110,7 @@ def ve_default_bridge(alpha, alpha_new, std, std_new):
 class DDIM(Predictor):
     def __init__(
         self,
-        score_fn: ScoreBasedPotential,
+        score_fn: ScoreFunction,
         std_bridge: Optional[Callable] = None,
         eta: float = 1.0,
     ):

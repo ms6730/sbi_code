@@ -442,9 +442,26 @@ class NSPE(NeuralInference):
 
         return deepcopy(self._neural_net)
 
-    # def _converged(self, epoch: int, stop_after_epochs: int) -> bool:
+    def _converged(self, epoch: int, stop_after_epochs: int) -> bool:
+        converged = False
 
-    #     return epoch > stop_after_epochs
+        assert self._neural_net is not None
+        neural_net = self._neural_net
+
+        # (Re)-start the epoch count with the first epoch or any improvement.
+        if epoch == 0 or self._val_loss < self._best_val_loss:
+            self._best_val_loss = self._val_loss
+            self._epochs_since_last_improvement = 0
+            self._best_model_state_dict = deepcopy(neural_net.state_dict())
+        else:
+            self._epochs_since_last_improvement += 1
+
+            # # If no validation improvement over many epochs, stop training.
+            if self._epochs_since_last_improvement > stop_after_epochs - 1:
+                #     neural_net.load_state_dict(self._best_model_state_dict)
+                converged = True
+
+        return converged
 
     def build_posterior(
         self,

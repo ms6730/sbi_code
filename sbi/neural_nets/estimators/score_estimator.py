@@ -39,8 +39,8 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
         input_shape: torch.Size,
         condition_shape: torch.Size,
         weight_fn: Union[str, Callable] = "max_likelihood",
-        mean_0: float = 0.0,
-        std_0: float = 1.0,
+        mean_0: Union[Tensor, float] = 0.0,
+        std_0: Union[Tensor, float] = 1.0,
         T_min: float = 1e-3,
         T_max: float = 1.0,
     ) -> None:
@@ -119,9 +119,8 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
         # The learnable part will be largly scaled at the beginning of the diffusion
         # and the gaussian part (where it should end up) will dominate at the end of
         # the diffusion.
-        output_score = (
-            self.mean_t_fn(time) / self.std_fn(time) * score_pred + score_gaussian
-        )
+        scale = self.mean_t_fn(time) / self.std_fn(time)
+        output_score = scale * score_pred + score_gaussian
 
         return output_score
 
@@ -326,6 +325,8 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
             self.weight_fn = (
                 lambda times: self.diffusion_fn(torch.ones((1,)), times) ** 2
             )
+        elif weight_fn == "variance":
+            self.weight_fn = lambda times: self.std_fn(times) ** 2
         elif callable(weight_fn):
             self.weight_fn = weight_fn
         else:
@@ -343,10 +344,23 @@ class VPScoreEstimator(ConditionalScoreEstimator):
         weight_fn: Union[str, Callable] = "max_likelihood",
         beta_min: float = 0.01,
         beta_max: float = 10.0,
+        mean_0: Union[Tensor, float] = 0.0,
+        std_0: Union[Tensor, float] = 1.0,
+        T_min: float = 1e-5,
+        T_max: float = 1.0,
     ) -> None:
         self.beta_min = beta_min
         self.beta_max = beta_max
-        super().__init__(net, input_shape, condition_shape, weight_fn=weight_fn)
+        super().__init__(
+            net,
+            input_shape,
+            condition_shape,
+            mean_0=mean_0,
+            std_0=std_0,
+            weight_fn=weight_fn,
+            T_min=T_min,
+            T_max=T_max,
+        )
 
     def mean_t_fn(self, times: Tensor) -> Tensor:
         """Conditional mean function for variance preserving SDEs.
@@ -428,6 +442,10 @@ class subVPScoreEstimator(ConditionalScoreEstimator):
         weight_fn: Union[str, Callable] = "max_likelihood",
         beta_min: float = 0.01,
         beta_max: float = 10.0,
+        mean_0: float = 0.0,
+        std_0: float = 1.0,
+        T_min: float = 1e-2,
+        T_max: float = 1.0,
     ) -> None:
         self.beta_min = beta_min
         self.beta_max = beta_max
@@ -436,8 +454,10 @@ class subVPScoreEstimator(ConditionalScoreEstimator):
             input_shape,
             condition_shape,
             weight_fn=weight_fn,
-            T_min=1e-1,
-            T_max=1.0,
+            mean_0=mean_0,
+            std_0=std_0,
+            T_min=T_min,
+            T_max=T_max,
         )
 
     def mean_t_fn(self, times: Tensor) -> Tensor:
@@ -532,12 +552,21 @@ class VEScoreEstimator(ConditionalScoreEstimator):
         input_shape: torch.Size,
         condition_shape: torch.Size,
         weight_fn: Union[str, Callable] = "max_likelihood",
-        sigma_min: float = 0.001,
+        sigma_min: float = 1e-5,
         sigma_max: float = 5.0,
+        mean_0: float = 0.0,
+        std_0: float = 1.0,
     ) -> None:
         self.sigma_min = sigma_min
         self.sigma_max = sigma_max
-        super().__init__(net, input_shape, condition_shape, weight_fn=weight_fn)
+        super().__init__(
+            net,
+            input_shape,
+            condition_shape,
+            weight_fn=weight_fn,
+            mean_0=mean_0,
+            std_0=std_0,
+        )
 
     def mean_t_fn(self, times: Tensor) -> Tensor:
         """Conditional mean function for variance exploding SDEs, which is always 1.

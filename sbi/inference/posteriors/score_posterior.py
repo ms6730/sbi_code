@@ -1,6 +1,6 @@
 # This file is part of sbi, a toolkit for simulation-based inference. sbi is licensed
 # under the Affero General Public License v3, see <https://www.gnu.org/licenses/>.
-from typing import Optional, Union
+from typing import Dict, Optional, Union
 
 import torch
 from torch import Tensor
@@ -91,7 +91,10 @@ class ScorePosterior(NeuralPosterior):
         x: Optional[Tensor] = None,
         predictor: Union[str, Predictor] = "euler_maruyma",
         corrector: Optional[Union[str, Corrector]] = None,
+        predictor_params: Optional[Dict] = None,
+        corrector_params: Optional[Dict] = None,
         steps: int = 500,
+        ts: Optional[Tensor] = None,
         max_sampling_batch_size: int = 10_000,
         sample_with: Optional[str] = None,
         show_progress_bars: bool = True,
@@ -111,11 +114,10 @@ class ScorePosterior(NeuralPosterior):
         """
 
         num_samples = torch.Size(sample_shape).numel()
-        # condition_shape = self.score_estimator._condition_shape
 
         x = self._x_else_default_x(x)
         x = reshape_to_batch_event(x, self.score_estimator.condition_shape)
-        self.potential_fn_gradient.set_x(x)  # TODO Fix when new batching rules are in
+        self.potential_fn_gradient.set_x(x)
 
         max_sampling_batch_size = (
             self.max_sampling_batch_size
@@ -130,19 +132,31 @@ class ScorePosterior(NeuralPosterior):
                 f"`.build_posterior(sample_with={sample_with}).`"
             )
 
-        T_max = self.score_estimator.T_max
-        T_min = self.score_estimator.T_min
-        ts = torch.linspace(T_max, T_min, steps)
+        if ts is None:
+            T_max = self.score_estimator.T_max
+            T_min = self.score_estimator.T_min
+            ts = torch.linspace(T_max, T_min, steps)
 
-        # TODO: Use `method` to select the correct sampler
         diffuser = Diffuser(
             self.potential_fn_gradient, predictor=predictor, corrector=corrector
         )
-        samples = diffuser.run(
-            num_samples=num_samples, ts=ts, show_progress_bars=show_progress_bars
+        max_sampling_batch_size = min(max_sampling_batch_size, num_samples)
+        samples = []
+        num_iter = num_samples // max_sampling_batch_size
+        num_iter = (
+            num_iter + 1 if (num_samples % max_sampling_batch_size) != 0 else num_iter
         )
+        for _ in range(num_iter):
+            samples.append(
+                diffuser.run(
+                    num_samples=max_sampling_batch_size,
+                    ts=ts,
+                    show_progress_bars=show_progress_bars,
+                )
+            )
+        samples = torch.cat(samples, dim=0)[:num_samples]
 
-        return samples.reshape(sample_shape + self.prior.event_shape)
+        return samples.reshape(sample_shape + self.score_estimator.event_shape)
 
     def log_prob(
         self,
@@ -186,7 +200,9 @@ class ScorePosterior(NeuralPosterior):
         max_sampling_batch_size: int = 10000,
         show_progress_bars: bool = True,
     ) -> Tensor:
-        raise NotImplementedError("Batched sampling is not implemented yet.")
+        raise NotImplementedError(
+            "Batched sampling is not implemented for ScorePosterior."
+        )
 
     def map(
         self,

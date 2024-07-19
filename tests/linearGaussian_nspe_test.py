@@ -71,7 +71,7 @@ def test_c2st_snpe_on_linearGaussian(sde_type, num_dim: int, prior_str: str):
     samples = posterior.sample((num_samples,))
 
     # Compute the c2st and assert it is near chance level of 0.5.
-    check_c2st(samples, target_samples, alg="snpe_c")
+    check_c2st(samples, target_samples, alg="nspe")
 
     # map_ = posterior.map(num_init_samples=1_000, show_progress_bars=False)
 

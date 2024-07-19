@@ -2,7 +2,6 @@ from typing import Optional, Union
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch import Tensor
 
 from sbi.neural_nets.embedding_nets import GaussianFourierTimeEmbedding
@@ -22,22 +21,18 @@ class EmbedInputs(nn.Module):
     embedding.
     """
 
-    def __init__(self, embedding_net_x, embedding_net_y, embedding_net_t, dim_x, dim_y):
+    def __init__(self, embedding_net_x, embedding_net_y, embedding_net_t):
         """Initializes the input layer.
 
         Args:
             embedding_net_x: Embedding network for x.
             embedding_net_y: Embedding network for y.
             embedding_net_t: Embedding network for time.
-            dim_x: dimensionality of x.
-            dim_y: dimensionality of y.
         """
         super().__init__()
         self.embedding_net_x = embedding_net_x
         self.embedding_net_y = embedding_net_y
         self.embedding_net_t = embedding_net_t
-        self.dim_x = dim_x
-        self.dim_y = dim_y
 
     def forward(self, inputs: list) -> Tensor:
         """Forward pass of the input layer.
@@ -66,14 +61,11 @@ class EmbedInputs(nn.Module):
 
 
 def build_input_layer(
-    batch_x: Tensor,
     batch_y: Tensor,
     t_embedding_dim: int,
-    z_score_x: Optional[str] = None,
     z_score_y: Optional[str] = "independent",
     embedding_net_x: nn.Module = nn.Identity(),
     embedding_net_y: nn.Module = nn.Identity(),
-    min_std: float = 1e-4,
 ) -> nn.Module:
     """Builds input layer for vector field regression, including time embedding, and
     optionally z-scores.
@@ -96,12 +88,6 @@ def build_input_layer(
     Returns:
         Input layer that concatenates x, y, and time embedding, optionally z-scores.
     """
-    z_score_x_bool, structured_x = z_score_parser(z_score_x)
-    if z_score_x_bool:
-        # TODO remove will move to score_estimator
-        embedding_net_x = nn.Sequential(
-            standardizing_net(batch_x, structured_x), embedding_net_x
-        )
 
     z_score_y_bool, structured_y = z_score_parser(z_score_y)
     if z_score_y_bool:
@@ -113,8 +99,6 @@ def build_input_layer(
         embedding_net_x,
         embedding_net_y,
         embedding_net_t,
-        dim_x=batch_x.shape[1],
-        dim_y=batch_y.shape[1],
     )
     return input_layer
 
@@ -124,7 +108,7 @@ def build_score_estimator(
     batch_y: Tensor,
     sde_type: Optional[str] = "vp",
     score_net: Optional[Union[str, nn.Module]] = "mlp",
-    z_score_x: Optional[str] = None,
+    z_score_x: Optional[str] = "independent",
     z_score_y: Optional[str] = "independent",
     t_embedding_dim: int = 32,
     num_layers: int = 3,
@@ -171,29 +155,25 @@ def build_score_estimator(
 
     """Builds score estimator for score-based generative models."""
     check_data_device(batch_x, batch_y)
-    # check_embedding_net_device(embedding_net=embedding_net_x, datum=batch_y)
-    # check_embedding_net_device(embedding_net=embedding_net_y, datum=batch_y)
 
     mean_0, std_0 = z_standardization(batch_x, z_score_x == "structured")
 
     input_layer = build_input_layer(
-        batch_x,
         batch_y,
         t_embedding_dim,
-        z_score_x,
         z_score_y,
         embedding_net_x,
         embedding_net_y,
     )
 
     # Infer the output dimensionalities of the embedding_net by making a forward pass.
-    x_dim = batch_x.shape[1]
-    x_numel = embedding_net_x(batch_x[:1]).numel()
-    y_numel = embedding_net_y(batch_y[:1]).numel()
+    x_numel = embedding_net_x(batch_x).shape[1:].numel()
+    y_numel = embedding_net_y(batch_y).shape[1:].numel()
+
     if score_net == "mlp":
         score_net = MLP(
             x_numel + y_numel + t_embedding_dim,
-            x_dim,
+            x_numel,
             hidden_dim=hidden_features,
             num_layers=num_layers,
         )
@@ -214,20 +194,62 @@ def build_score_estimator(
         raise ValueError(f"SDE type: {sde_type} not supported.")
 
     neural_net = nn.Sequential(input_layer, score_net)
-    return estimator(neural_net, batch_x.shape[1:], batch_y.shape[1:], **kwargs)
+    input_shape = batch_x.shape[1:]
+    condition_shape = batch_y.shape[1:]
+    return estimator(
+        neural_net, input_shape, condition_shape, mean_0=mean_0, std_0=std_0, **kwargs
+    )
 
 
 class MLP(nn.Module):
     """Simple fully connected neural network."""
 
-    def __init__(self, input_dim, output_dim, hidden_dim=256, num_layers=3):
+    def __init__(
+        self,
+        input_dim,
+        output_dim,
+        hidden_dim=50,
+        num_layers=5,
+        activation=nn.GELU(),
+        layer_norm=False,
+        skip_connection=False,
+    ):
         super().__init__()
-        self.layers = nn.ModuleList([nn.Linear(input_dim, hidden_dim)])
+
+        self.num_layers = num_layers
+        self.activation = activation
+        self.skip_connection = skip_connection
+
+        # Initialize layers
+        self.layers = nn.ModuleList()
+
+        # Input layer
+        self.layers.append(nn.Linear(input_dim, hidden_dim))
+
+        # Hidden layers
         for _ in range(num_layers - 1):
-            self.layers.append(nn.Linear(hidden_dim, hidden_dim))
+            if layer_norm:
+                block = nn.Sequential(
+                    nn.Linear(hidden_dim, hidden_dim),
+                    nn.LayerNorm(hidden_dim),
+                    activation,
+                )
+            else:
+                block = nn.Sequential(nn.Linear(hidden_dim, hidden_dim), activation)
+            self.layers.append(block)
+
+        # Output layer
         self.layers.append(nn.Linear(hidden_dim, output_dim))
 
     def forward(self, x):
-        for layer in self.layers[:-1]:
-            x = F.relu(layer(x))
-        return self.layers[-1](x)
+        h = self.activation(self.layers[0](x))
+
+        # Forward pass through hidden layers
+        for i in range(1, self.num_layers - 1):
+            h_new = self.layers[i](h)
+            h = (h + h_new) if self.skip_connection else h_new
+
+        # Output layer
+        output = self.layers[-1](h)
+
+        return output

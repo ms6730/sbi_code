@@ -205,7 +205,7 @@ class NeuralPotentialPosterior(NeuralPosterior):
                 stacklevel=2,
             )
 
-        if not isinstance(potential_fn, BasePotential) or not isinstance(
+        if not isinstance(potential_fn, BasePotential) and not isinstance(
             potential_fn, BasePotentialGradient
         ):
             kwargs_of_callable = list(inspect.signature(potential_fn).parameters.keys())

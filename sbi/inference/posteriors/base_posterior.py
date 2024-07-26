@@ -264,6 +264,21 @@ class NeuralPotentialPosterior(NeuralPosterior):
             theta.to(self._device), track_gradients=track_gradients
         )
 
+    def _x_else_default_x(self, x: Optional[Array]) -> Tensor:
+        if x is not None:
+            # New x, reset posterior sampler.
+            self._posterior_sampler = None
+            return process_x(
+                x, x_event_shape=None, allow_iid_x=self.potential_fn.allow_iid_x
+            )
+        elif self.default_x is None:
+            raise ValueError(
+                "Context `x` needed when a default has not been set."
+                "If you'd like to have a default, use the `.set_default_x()` method."
+            )
+        else:
+            return self.default_x
+
     def _calculate_map(
         self,
         num_iter: int = 1_000,

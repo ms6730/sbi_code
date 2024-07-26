@@ -120,7 +120,7 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
         # and the gaussian part (where it should end up) will dominate at the end of
         # the diffusion.
         scale = self.mean_t_fn(time) / self.std_fn(time)
-        output_score = scale * score_pred + score_gaussian
+        output_score = -scale * score_pred - score_gaussian
 
         return output_score
 

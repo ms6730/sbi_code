@@ -64,7 +64,7 @@ class Predictor(ABC):
         pass
 
 
-@register_predictor("euler_maruyma")
+@register_predictor("euler_maruyama")
 class EulerMaruyama(Predictor):
     def __init__(
         self,
@@ -96,14 +96,14 @@ class EulerMaruyama(Predictor):
         return theta - f_backward * dt + g_backward * torch.randn_like(theta) * dt_sqrt
 
 
-def vp_default_bridge(alpha, alpha_new, std, std_new):
+def vp_default_bridge(alpha, alpha_new, std, std_new, t1, t0):
     # Default bridge function for the DDIM predictor https://arxiv.org/pdf/2010.02502
     return std_new / std * torch.sqrt((1 - alpha / alpha_new))
 
 
-def ve_default_bridge(alpha, alpha_new, std, std_new):
+def ve_default_bridge(alpha, alpha_new, std, std_new, t1, t0):
     # Something else
-    return std_new / std
+    return std_new / 10
 
 
 @register_predictor("ddim")
@@ -128,15 +128,14 @@ class DDIM(Predictor):
 
     # @torch.compile(fullgraph=True, dynamic=True)
     def predict(self, theta: Tensor, t1: Tensor, t0: Tensor) -> Tensor:
-        # TODO Check correctness
         alpha = self.alpha_fn(t1)
         std = self.std_fn(t1)
         alpha_new = self.alpha_fn(t0)
         std_new = self.std_fn(t0)
 
-        std_bridge = self.eta * self.std_bridge(alpha, alpha_new, std, std_new)
+        std_bridge = self.eta * self.std_bridge(alpha, alpha_new, std, std_new, t1, t0)
         # We require that std_bridge >= std! Otherwise NANs will be produced
-        std_bridge = torch.clip(std_bridge, max=std)
+        std_bridge = torch.clip(std_bridge, max=std_new)
 
         score = self.score_fn(theta, t1)
         # Predicted Gaussian noise
@@ -145,11 +144,11 @@ class DDIM(Predictor):
         x0_pred = (theta - std * eps_pred) / alpha
 
         # Correction term for difference in std
-        bridge_correction = torch.sqrt(std**2 - std_bridge**2) * eps_pred
+        bridge_correction = torch.sqrt(std_new**2 - std_bridge**2) * eps_pred
         bridge_noise = torch.randn_like(theta) * std_bridge
 
         # New position: Predcit new mean position by mapping predicted clean sample back
-        # to the new time i.e. using
+        # to the new time and adding back the noise.
         new_position = alpha_new * x0_pred + bridge_correction + bridge_noise
 
         return new_position

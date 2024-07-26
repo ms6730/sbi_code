@@ -89,7 +89,7 @@ class ScorePosterior(NeuralPosterior):
         self,
         sample_shape: Shape = torch.Size(),
         x: Optional[Tensor] = None,
-        predictor: Union[str, Predictor] = "euler_maruyma",
+        predictor: Union[str, Predictor] = "euler_maruyama",
         corrector: Optional[Union[str, Corrector]] = None,
         predictor_params: Optional[Dict] = None,
         corrector_params: Optional[Dict] = None,
@@ -156,7 +156,7 @@ class ScorePosterior(NeuralPosterior):
             )
         samples = torch.cat(samples, dim=0)[:num_samples]
 
-        return samples.reshape(sample_shape + self.score_estimator.event_shape)
+        return samples.reshape(sample_shape + self.score_estimator.input_shape)
 
     def log_prob(
         self,

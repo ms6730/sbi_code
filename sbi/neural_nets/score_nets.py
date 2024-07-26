@@ -208,11 +208,11 @@ class MLP(nn.Module):
         self,
         input_dim,
         output_dim,
-        hidden_dim=50,
+        hidden_dim=100,
         num_layers=5,
         activation=nn.GELU(),
-        layer_norm=False,
-        skip_connection=False,
+        layer_norm=True,
+        skip_connection=True,
     ):
         super().__init__()
 

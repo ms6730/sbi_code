@@ -1,7 +1,7 @@
 # This file is part of sbi, a toolkit for simulation-based inference. sbi is licensed
 # under the Affero General Public License v3, see <https://www.gnu.org/licenses/>.
 
-from typing import Callable, Optional, Tuple
+from typing import Optional, Tuple
 
 import torch
 from torch import Tensor
@@ -15,10 +15,10 @@ from sbi.utils import mcmc_transform
 
 def score_estimator_based_potential_gradient(
     score_estimator: ConditionalScoreEstimator,
-    prior: Distribution,
+    prior: Optional[Distribution],
     x_o: Optional[Tensor],
     enable_transform: bool = False,
-) -> Tuple[Callable, TorchTransform]:
+) -> Tuple["ScoreFunction", TorchTransform]:
     r"""Returns the potential function gradient for score estimators.
 
     Args:
@@ -37,9 +37,12 @@ def score_estimator_based_potential_gradient(
         enable_transform is False
     ), "Transforms are not yet supported for score estimators."
 
-    theta_transform = mcmc_transform(
-        prior, device=device, enable_transform=enable_transform
-    )
+    if prior is not None:
+        theta_transform = mcmc_transform(
+            prior, device=device, enable_transform=enable_transform
+        )
+    else:
+        theta_transform = torch.distributions.transforms.identity_transform
 
     return potential_fn, theta_transform
 

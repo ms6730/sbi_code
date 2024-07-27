@@ -49,7 +49,7 @@ class NSPE(NeuralInference):
 
         Instead of performing conditonal *density* estimation, NSPE methods perform
         conditional *score* estimation i.e. they estimate the gradient of the log
-        density using denoising score matching loss. Yet, we not only estimate the score
+        density using denoising score matching loss. We not only estimate the score
         of the posterior, but a family of distributions analogous to diffusion models.
 
         NOTE: Single-round NSPE is currently the only supported mode.
@@ -443,27 +443,6 @@ class NSPE(NeuralInference):
         self._neural_net.zero_grad(set_to_none=True)
 
         return deepcopy(self._neural_net)
-
-    def _converged(self, epoch: int, stop_after_epochs: int) -> bool:
-        converged = False
-
-        assert self._neural_net is not None
-        neural_net = self._neural_net
-
-        # (Re)-start the epoch count with the first epoch or any improvement.
-        if epoch == 0 or self._val_loss < self._best_val_loss:
-            self._best_val_loss = self._val_loss
-            self._epochs_since_last_improvement = 0
-            self._best_model_state_dict = deepcopy(neural_net.state_dict())
-        else:
-            self._epochs_since_last_improvement += 1
-
-            # # If no validation improvement over many epochs, stop training.
-            if self._epochs_since_last_improvement > stop_after_epochs - 1:
-                #     neural_net.load_state_dict(self._best_model_state_dict)
-                converged = True
-
-        return converged
 
     def build_posterior(
         self,

@@ -69,12 +69,14 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
 
         # Starting mean and std of the target distribution (otherwise assumes 0,1).
         # This will be used to precondition the score network to improve training.
-        self.mean_0 = mean_0
-        self.std_0 = std_0
+        self.register_buffer("mean_0", torch.tensor(mean_0))
+        self.register_buffer("std_0", torch.tensor(std_0))
 
         # We estimate the mean and std of the source distribution at time T_max.
-        self.mean_T = self.approx_marginal_mean(torch.tensor([T_max]))
-        self.std_T = self.approx_marginal_std(torch.tensor([T_max]))
+        mean_T = self.approx_marginal_mean(torch.tensor([T_max]))
+        std_T = self.approx_marginal_std(torch.tensor([T_max]))
+        self.register_buffer("mean_T", mean_T)
+        self.register_buffer("std_T", std_T)
 
     def forward(self, input: Tensor, condition: Tensor, time: Tensor) -> Tensor:
         r"""Forward pass of the score estimator network to compute the conditional score
@@ -153,7 +155,11 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
         """
         # Sample diffusion times.
         if times is None:
-            times = torch.rand(input.shape[0]) * (self.T_max - self.T_min) + self.T_min
+            times = (
+                torch.rand(input.shape[0], device=input.device)
+                * (self.T_max - self.T_min)
+                + self.T_min
+            )
 
         # Sample noise.
         eps = torch.randn_like(input)
@@ -323,7 +329,10 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
             self.weight_fn = lambda times: 1
         elif weight_fn == "max_likelihood":
             self.weight_fn = (
-                lambda times: self.diffusion_fn(torch.ones((1,)), times) ** 2
+                lambda times: self.diffusion_fn(
+                    torch.ones((1,), device=times.device), times
+                )
+                ** 2
             )
         elif weight_fn == "variance":
             self.weight_fn = lambda times: self.std_fn(times) ** 2
@@ -577,7 +586,7 @@ class VEScoreEstimator(ConditionalScoreEstimator):
         Returns:
             Conditional mean at a given time.
         """
-        return torch.ones_like(times).unsqueeze(-1)
+        return torch.ones_like(times, device=times.device).unsqueeze(-1)
 
     def std_fn(self, times: Tensor) -> Tensor:
         """Standard deviation function for variance exploding SDEs.

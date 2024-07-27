@@ -45,6 +45,29 @@ def test_score_estimator_loss_shapes(
     assert losses.shape == (batch_dim,)
 
 
+@pytest.mark.gpu
+@pytest.mark.parametrize("sde_type", ["vp", "ve", "subvp"])
+@pytest.mark.parametrize("device", ["cpu", "cuda"])
+def test_score_estimator_on_device(sde_type, device):
+    """Test whether DensityEstimators can be moved to the device."""
+    score_estimator = build_score_estimator(
+        torch.randn(100, 1), torch.randn(100, 1), sde_type=sde_type
+    )
+    score_estimator.to(device)
+
+    # Test forward
+    inputs = torch.randn(100, 1, device=device)
+    condition = torch.randn(100, 1, device=device)
+    time = torch.randn(1, device=device)
+    out = score_estimator(inputs, condition, time)
+
+    assert str(out.device).split(":")[0] == device, "Output device mismatch."
+
+    # Test loss
+    loss = score_estimator.loss(inputs, condition)
+    assert str(loss.device).split(":")[0] == device, "Loss device mismatch."
+
+
 @pytest.mark.parametrize(
     "sde_type",
     [

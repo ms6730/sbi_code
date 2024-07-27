@@ -264,6 +264,30 @@ class NeuralPotentialPosterior(NeuralPosterior):
             theta.to(self._device), track_gradients=track_gradients
         )
 
+    def set_default_x(self, x: Tensor) -> "NeuralPosterior":
+        """Set new default x for `.sample(), .log_prob` to use as conditioning context.
+
+        Reset the MAP stored for the old default x if applicable.
+
+        This is a pure convenience to avoid having to repeatedly specify `x` in calls to
+        `.sample()` and `.log_prob()` - only $\theta$ needs to be passed.
+
+        This convenience is particularly useful when the posterior is focused, i.e.
+        has been trained over multiple rounds to be accurate in the vicinity of a
+        particular `x=x_o` (you can check if your posterior object is focused by
+        printing it).
+
+        NOTE: this method is chainable, i.e. will return the NeuralPosterior object so
+        that calls like `posterior.set_default_x(my_x).sample(mytheta)` are possible.
+
+        Args:
+            x: The default observation to set for the posterior $p(\theta|x)$.
+        Returns:
+            `NeuralPosterior` that will use a default `x` when not explicitly passed.
+        """
+        x = process_x(x, None, allow_iid_x=self.potential_fn.allow_iid_x)
+        return super().set_default_x(x)
+
     def _x_else_default_x(self, x: Optional[Array]) -> Tensor:
         if x is not None:
             # New x, reset posterior sampler.

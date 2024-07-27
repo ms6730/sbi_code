@@ -6,7 +6,7 @@ import torch
 from torch import Tensor
 from torch.distributions import Distribution
 
-from sbi.inference.posteriors.base_posterior import NeuralPotentialPosterior
+from sbi.inference.posteriors.base_posterior import NeuralPosterior
 from sbi.inference.potentials.score_based_potential import (
     score_estimator_based_potential_gradient,
 )
@@ -19,7 +19,7 @@ from sbi.sbi_types import Shape
 from sbi.utils import check_prior
 
 
-class ScorePosterior(NeuralPotentialPosterior):
+class ScorePosterior(NeuralPosterior):
     r"""Posterior $p(\theta|x_o)$ with `log_prob()` and `sample()` methods. It samples
     from the diffusion model given the score_estimator and rejects samples that lie
     outside of the prior bounds.

@@ -49,7 +49,8 @@ class NSPE(NeuralInference):
 
         Instead of performing conditonal *density* estimation, NSPE methods perform
         conditional *score* estimation i.e. they estimate the gradient of the log
-        density.
+        density using denoising score matching loss. Yet, we not only estimate the score
+        of the posterior, but a family of distributions analogous to diffusion models.
 
         NOTE: Single-round NSPE is currently the only supported mode.
 
@@ -200,7 +201,7 @@ class NSPE(NeuralInference):
 
     def train(
         self,
-        training_batch_size: int = 50,
+        training_batch_size: int = 200,
         learning_rate: float = 5e-4,
         validation_fraction: float = 0.1,
         stop_after_epochs: int = 200,
@@ -516,7 +517,7 @@ class NSPE(NeuralInference):
         if score_estimator is None:
             score_estimator = self._neural_net
             # If internal net is used device is defined.
-            # device = self._device
+            device = self._device
         else:
             assert score_estimator is not None, (
                 "You did not pass a score estimator. You have to pass the score "
@@ -525,7 +526,7 @@ class NSPE(NeuralInference):
             )
             score_estimator = score_estimator
             # Otherwise, infer it from the device of the net parameters.
-        # device = next(score_estimator.parameters()).device.type
+            device = next(score_estimator.parameters()).device.type
 
         if sample_with == "ode":
             raise NotImplementedError("ODE-based sampling is not yet implemented.")
@@ -533,7 +534,8 @@ class NSPE(NeuralInference):
             posterior = ScorePosterior(
                 score_estimator,  # type: ignore
                 prior,
-                x_shape=self._x_shape,  # type: ignore
+                x_shape=self._x_shape,  # type: ignore # NOTE: Deprectated (not used)
+                device=device,
             )
 
         self._posterior = posterior

@@ -25,18 +25,19 @@ from sbi.samplers.score.score import Diffuser
     ],
 )
 @pytest.mark.parametrize("predictor", ("euler_maruyama", "ddim"))
+@pytest.mark.parametrize("corrector", (None, "langevin", "gibbs"))
 @pytest.mark.parametrize("input_event_shape", ((1,), (4,)))
 @pytest.mark.parametrize("mu", (-1.0, 0.0, 1.0))
 @pytest.mark.parametrize("std", (1.0, 0.1))
 def test_score_estimator_forward_shapes(
-    sde_type, predictor, input_event_shape, mu, std
+    sde_type, predictor, corrector, input_event_shape, mu, std
 ):
     mean0 = mu * torch.ones(input_event_shape)
     std0 = std * torch.ones(input_event_shape)
 
     score_fn = _build_gaussian_score_estimator(sde_type, input_event_shape, mean0, std0)
 
-    sampler = Diffuser(score_fn, predictor, None)
+    sampler = Diffuser(score_fn, predictor, corrector)
 
     T_min = score_fn.score_estimator.T_min
     T_max = score_fn.score_estimator.T_max

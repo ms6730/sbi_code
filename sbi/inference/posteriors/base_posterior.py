@@ -21,7 +21,7 @@ from sbi.utils.torchutils import ensure_theta_batched, process_device
 from sbi.utils.user_input_checks import process_x
 
 
-class NeuralPosterior(ABC):
+class NeuralPotentialPosterior(ABC):
     r"""Posterior $p(\theta|x)$ with `log_prob()` and `sample()` methods.<br/><br/>
     All inference methods in sbi train a neural network which is then used to obtain
     the posterior distribution. The `NeuralPosterior` class wraps the trained network
@@ -88,7 +88,7 @@ class NeuralPosterior(ABC):
         """See `set_default_x`."""
         self.set_default_x(x)
 
-    def set_default_x(self, x: Tensor) -> "NeuralPosterior":
+    def set_default_x(self, x: Tensor) -> "NeuralPotentialPosterior":
         """Set new default x for `.sample(), .log_prob` to use as conditioning context.
 
         Reset the MAP stored for the old default x if applicable.
@@ -173,7 +173,7 @@ class NeuralPosterior(ABC):
         self.__dict__ = state_dict
 
 
-class NeuralPotentialPosterior(NeuralPosterior):
+class NeuralPotentialPosterior(NeuralPotentialPosterior):
     r"""Posterior $p(\theta|x)$ with `log_prob()` and `sample()` methods.<br/><br/>
     All inference methods in sbi train a neural network which is then used to obtain
     the posterior distribution. The `NeuralPosterior` class wraps the trained network
@@ -264,7 +264,7 @@ class NeuralPotentialPosterior(NeuralPosterior):
             theta.to(self._device), track_gradients=track_gradients
         )
 
-    def set_default_x(self, x: Tensor) -> "NeuralPosterior":
+    def set_default_x(self, x: Tensor) -> "NeuralPotentialPosterior":
         """Set new default x for `.sample(), .log_prob` to use as conditioning context.
 
         Reset the MAP stored for the old default x if applicable.

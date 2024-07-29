@@ -9,7 +9,10 @@ import torch
 from torch import Tensor
 from torch.distributions import Distribution
 
-from sbi.inference.posteriors.base_posterior import NeuralPotentialPosterior
+from sbi.inference.posteriors.base_posterior import (
+    NeuralPosterior,
+    NeuralPotentialPosterior,
+)
 from sbi.inference.posteriors.direct_posterior import DirectPosterior
 from sbi.inference.potentials.base_potential import BasePotential
 from sbi.sbi_types import Shape, TorchTransform
@@ -20,8 +23,8 @@ from sbi.utils.torchutils import ensure_theta_batched
 
 
 def kl_d_via_monte_carlo(
-    p: Union[NeuralPotentialPosterior, Distribution],
-    q: Union[NeuralPotentialPosterior, Distribution],
+    p: Union[NeuralPosterior, Distribution],
+    q: Union[NeuralPosterior, Distribution],
     num_samples: int = 1000,
 ) -> Tensor:
     r"""
@@ -59,7 +62,7 @@ def kl_d_via_monte_carlo(
 
 
 def get_dkl_gaussian_prior(
-    posterior: NeuralPotentialPosterior,
+    posterior: NeuralPosterior,
     x_o: Tensor,
     likelihood_shift: Tensor,
     likelihood_cov: Tensor,

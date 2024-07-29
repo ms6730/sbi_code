@@ -8,6 +8,7 @@ from typing import Tuple
 import pytest
 import torch
 
+from sbi.neural_nets.embedding_nets import CNNEmbedding
 from sbi.neural_nets.score_nets import build_score_estimator
 
 # TODO: Test different build options for score estimators!
@@ -22,7 +23,13 @@ from sbi.neural_nets.score_nets import build_score_estimator
     ],
 )
 @pytest.mark.parametrize("input_sample_dim", (1, 2))
-@pytest.mark.parametrize("input_event_shape", ((1,), (4,)))
+@pytest.mark.parametrize(
+    "input_event_shape",
+    (
+        (1,),
+        (4,),
+    ),
+)
 @pytest.mark.parametrize("condition_event_shape", ((1,), (7,)))
 @pytest.mark.parametrize("batch_dim", (1, 10))
 def test_score_estimator_loss_shapes(
@@ -122,22 +129,33 @@ def _build_score_estimator_and_tensors(
     )
     building_xs = torch.randn((1000, *condition_event_shape))
 
-    # TODO Test other build options!
-    # if len(condition_event_shape) > 1:
-    #     embedding_net = CNNEmbedding(condition_event_shape, kernel_size=1)
-    # else:
-    #     embedding_net = torch.nn.Identity()
+    if len(condition_event_shape) > 1:
+        embedding_net_y = CNNEmbedding(condition_event_shape, kernel_size=1)
+    else:
+        embedding_net_y = torch.nn.Identity()
+
+    if len(input_event_shape) > 1:
+        embedding_net_x = CNNEmbedding(input_event_shape, kernel_size=1)
+    else:
+        embedding_net_x = torch.nn.Identity()
 
     score_estimator = build_score_estimator(
         torch.randn_like(building_thetas),
         torch.randn_like(building_xs),
         sde_type=sde_type,
+        embedding_net_x=embedding_net_x,
+        embedding_net_y=embedding_net_y,
     )
 
     inputs = building_thetas[:batch_dim]
     condition = building_xs[:batch_dim]
 
     inputs = inputs.unsqueeze(0)
-    inputs = inputs.expand(input_sample_dim, -1, -1)
+    inputs = inputs.expand(
+        [
+            input_sample_dim,
+        ]
+        + [-1] * (1 + len(input_event_shape))
+    )
     condition = condition
     return score_estimator, inputs, condition

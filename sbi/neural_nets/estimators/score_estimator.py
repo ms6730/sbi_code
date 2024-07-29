@@ -69,8 +69,13 @@ class ConditionalScoreEstimator(ConditionalVectorFieldEstimator):
 
         # Starting mean and std of the target distribution (otherwise assumes 0,1).
         # This will be used to precondition the score network to improve training.
-        self.register_buffer("mean_0", torch.tensor(mean_0))
-        self.register_buffer("std_0", torch.tensor(std_0))
+        if not isinstance(mean_0, Tensor):
+            mean_0 = torch.tensor([mean_0])
+        if not isinstance(std_0, Tensor):
+            std_0 = torch.tensor([std_0])
+
+        self.register_buffer("mean_0", mean_0.clone().detach())
+        self.register_buffer("std_0", std_0.clone().detach())
 
         # We estimate the mean and std of the source distribution at time T_max.
         mean_T = self.approx_marginal_mean(torch.tensor([T_max]))
@@ -379,11 +384,13 @@ class VPScoreEstimator(ConditionalScoreEstimator):
         Returns:
             Conditional mean at a given time.
         """
-        a = torch.exp(
+        phi = torch.exp(
             -0.25 * times**2.0 * (self.beta_max - self.beta_min)
             - 0.5 * times * self.beta_min
         )
-        return a.unsqueeze(-1)
+        for _ in range(len(self.input_shape)):
+            phi = phi.unsqueeze(-1)
+        return phi
 
     def std_fn(self, times: Tensor) -> Tensor:
         """Standard deviation function for variance preserving SDEs.
@@ -396,7 +403,9 @@ class VPScoreEstimator(ConditionalScoreEstimator):
         std = 1.0 - torch.exp(
             -0.5 * times**2.0 * (self.beta_max - self.beta_min) - times * self.beta_min
         )
-        return torch.sqrt(std.unsqueeze(-1))
+        for _ in range(len(self.input_shape)):
+            std = std.unsqueeze(-1)
+        return torch.sqrt(std)
 
     def _beta_schedule(self, times: Tensor) -> Tensor:
         """Linear beta schedule for mean scaling in variance preserving SDEs.
@@ -477,11 +486,13 @@ class subVPScoreEstimator(ConditionalScoreEstimator):
         Returns:
             Conditional mean at a given time.
         """
-        a = torch.exp(
+        phi = torch.exp(
             -0.25 * times**2.0 * (self.beta_max - self.beta_min)
             - 0.5 * times * self.beta_min
         )
-        return a.unsqueeze(-1)
+        for _ in range(len(self.input_shape)):
+            phi = phi.unsqueeze(-1)
+        return phi
 
     def std_fn(self, times: Tensor) -> Tensor:
         """Standard deviation function for variance preserving SDEs.
@@ -494,7 +505,9 @@ class subVPScoreEstimator(ConditionalScoreEstimator):
         std = 1.0 - torch.exp(
             -0.5 * times**2.0 * (self.beta_max - self.beta_min) - times * self.beta_min
         )
-        return std.unsqueeze(-1)
+        for _ in range(len(self.input_shape)):
+            std = std.unsqueeze(-1)
+        return std
 
     def _beta_schedule(self, times: Tensor) -> Tensor:
         """Linear beta schedule for mean scaling in sub-variance preserving SDEs.
@@ -536,12 +549,14 @@ class subVPScoreEstimator(ConditionalScoreEstimator):
             Diffusion function at a given time.
         """
         g = torch.sqrt(
-            self._beta_schedule(times)
-            * (
-                1
-                - torch.exp(
-                    -2 * self.beta_min * times
-                    - (self.beta_max - self.beta_min) * times**2
+            torch.abs(
+                self._beta_schedule(times)
+                * (
+                    1
+                    - torch.exp(
+                        -2 * self.beta_min * times
+                        - (self.beta_max - self.beta_min) * times**2
+                    )
                 )
             )
         )
@@ -586,7 +601,10 @@ class VEScoreEstimator(ConditionalScoreEstimator):
         Returns:
             Conditional mean at a given time.
         """
-        return torch.ones_like(times, device=times.device).unsqueeze(-1)
+        phi = torch.ones_like(times, device=times.device)
+        for _ in range(len(self.input_shape)):
+            phi = phi.unsqueeze(-1)
+        return phi
 
     def std_fn(self, times: Tensor) -> Tensor:
         """Standard deviation function for variance exploding SDEs.
@@ -598,7 +616,9 @@ class VEScoreEstimator(ConditionalScoreEstimator):
             Standard deviation at a given time.
         """
         std = self.sigma_min * (self.sigma_max / self.sigma_min) ** times
-        return std.unsqueeze(-1)
+        for _ in range(len(self.input_shape)):
+            std = std.unsqueeze(-1)
+        return std
 
     def _sigma_schedule(self, times: Tensor) -> Tensor:
         """Geometric sigma schedule for variance exploding SDEs.
@@ -634,7 +654,7 @@ class VEScoreEstimator(ConditionalScoreEstimator):
             Diffusion function at a given time.
         """
         g = self._sigma_schedule(times) * math.sqrt(
-            2 * math.log(self.sigma_max / self.sigma_min)
+            (2 * math.log(self.sigma_max / self.sigma_min))
         )
 
         while len(g.shape) < len(input.shape):

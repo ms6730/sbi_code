@@ -38,7 +38,7 @@ class NSPE(NeuralInference):
         self,
         prior: Optional[Distribution] = None,
         score_estimator: Union[str, Callable] = "mlp",
-        sde_type: str = "vp",
+        sde_type: str = "ve",
         device: str = "cpu",
         logging_level: Union[int, str] = "WARNING",
         summary_writer: Optional[SummaryWriter] = None,
@@ -444,6 +444,34 @@ class NSPE(NeuralInference):
 
         return deepcopy(self._neural_net)
 
+    def _converged(self, epoch: int, stop_after_epochs: int) -> bool:
+        """Check if training has converged.
+
+        Args:
+            epoch: Current epoch.
+            stop_after_epochs: Number of epochs to wait for improvement on the
+                validation set before terminating training.
+
+        Returns:
+            Whether training has converged.
+        """
+        converged = False
+
+        # No checkpointing, just check if the validation loss has improved.
+
+        # (Re)-start the epoch count with the first epoch or any improvement.
+        if epoch == 0 or self._val_loss < self._best_val_loss:
+            self._best_val_loss = self._val_loss
+            self._epochs_since_last_improvement = 0
+        else:
+            self._epochs_since_last_improvement += 1
+
+        # If no validation improvement over many epochs, stop training.
+        if self._epochs_since_last_improvement > stop_after_epochs - 1:
+            converged = True
+
+        return converged
+
     def build_posterior(
         self,
         score_estimator: Optional[ConditionalScoreEstimator] = None,
@@ -508,6 +536,7 @@ class NSPE(NeuralInference):
             device = next(score_estimator.parameters()).device.type
 
         if sample_with == "ode":
+            # NOTE: Build similar to Flow matching stuff
             raise NotImplementedError("ODE-based sampling is not yet implemented.")
         elif sample_with == "sde":
             posterior = ScorePosterior(

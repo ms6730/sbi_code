@@ -13,9 +13,7 @@ from sbi.simulators.linear_gaussian import (
 )
 from sbi.utils.user_input_checks import prepare_for_sbi
 
-from .test_utils import (
-    check_c2st,
-)
+from .test_utils import check_c2st
 
 
 @pytest.mark.slow
@@ -74,11 +72,12 @@ def test_c2st_snpe_on_linearGaussian(sde_type, num_dim: int, prior_str: str):
     check_c2st(samples, target_samples, alg="nspe")
 
     # map_ = posterior.map(num_init_samples=1_000, show_progress_bars=False)
+    # assert ((map_ - gt_posterior.mean) ** 2).sum() < 0.5
 
     # Checks for log_prob()
     # if prior_str == "gaussian":
     #     # For the Gaussian prior, we compute the KLd between ground truth and
-    # posterior.
+    #     # posterior.
     #     dkl = get_dkl_gaussian_prior(
     #         posterior,
     #         x_o[0],
@@ -93,32 +92,3 @@ def test_c2st_snpe_on_linearGaussian(sde_type, num_dim: int, prior_str: str):
     #     assert (
     #         dkl < max_dkl
     #     ), f"D-KL={dkl} is more than 2 stds above the average performance."
-
-    #     assert ((map_ - gt_posterior.mean) ** 2).sum() < 0.5
-
-    # elif prior_str == "uniform":
-    #     # Check whether the returned probability outside of the support is zero.
-    #     posterior_prob = get_prob_outside_uniform_prior(posterior, prior, num_dim)
-    #     assert (
-    #         posterior_prob == 0.0
-    #     ), "The posterior probability outside of the prior support is not zero"
-
-    #     # Check whether normalization (i.e. scaling up the density due
-    #     # to leakage into regions without prior support) scales up the density by the
-    #     # correct factor.
-    #     (
-    #         posterior_likelihood_unnorm,
-    #         posterior_likelihood_norm,
-    #         acceptance_prob,
-    #     ) = get_normalization_uniform_prior(posterior, prior, x=x_o)
-    #     # The acceptance probability should be *exactly* the ratio of the unnormalized
-    #     # and the normalized likelihood. However, we allow for an error margin of 1%,
-    #     # since the estimation of the acceptance probability is random (based on
-    #     # rejection sampling).
-    #     assert (
-    #         acceptance_prob * 0.99
-    #         < posterior_likelihood_unnorm / posterior_likelihood_norm
-    #         < acceptance_prob * 1.01
-    #     ), "Normalizing the posterior density using the acceptance probability failed"
-
-    #     assert ((map_ - ones(num_dim)) ** 2).sum() < 0.5

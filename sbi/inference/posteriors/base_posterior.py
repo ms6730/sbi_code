@@ -126,7 +126,6 @@ class NeuralPosterior(ABC):
         else:
             return self.default_x
 
-    @abstractmethod
     def map(
         self,
         x: Optional[Tensor] = None,
@@ -139,6 +138,50 @@ class NeuralPosterior(ABC):
         show_progress_bars: bool = False,
         force_update: bool = False,
     ) -> Tensor:
+        """Returns stored maximum-a-posterior estimate (MAP), otherwise calculates it.
+
+        See child classes for docstring.
+        """
+
+        if x is not None:
+            raise ValueError(
+                "Passing `x` directly to `.map()` has been deprecated."
+                "Use `.self_default_x()` to set `x`, and then run `.map()` "
+            )
+
+        if self.default_x is None:
+            raise ValueError(
+                "Default `x` has not been set."
+                "To set the default, use the `.set_default_x()` method."
+            )
+
+        if self._map is None or force_update:
+            self._map = self._calculate_map(
+                num_iter=num_iter,
+                num_to_optimize=num_to_optimize,
+                learning_rate=learning_rate,
+                init_method=init_method,
+                num_init_samples=num_init_samples,
+                save_best_every=save_best_every,
+                show_progress_bars=show_progress_bars,
+            )
+        return self._map
+
+    @abstractmethod
+    def _calculate_map(
+        self,
+        num_iter: int = 1_000,
+        num_to_optimize: int = 100,
+        learning_rate: float = 0.01,
+        init_method: Union[str, Tensor] = "posterior",
+        num_init_samples: int = 1_000,
+        save_best_every: int = 10,
+        show_progress_bars: bool = False,
+    ) -> Tensor:
+        """Calculates the maximum-a-posteriori estimate (MAP).
+
+        See `map()` method of child classes for docstring.
+        """
         pass
 
     def __repr__(self):
@@ -303,6 +346,31 @@ class NeuralPotentialPosterior(NeuralPosterior):
         else:
             return self.default_x
 
+    def map(
+        self,
+        x: Tensor | None = None,
+        num_iter: int = 1000,
+        num_to_optimize: int = 100,
+        learning_rate: float = 0.01,
+        init_method: str | Tensor = "posterior",
+        num_init_samples: int = 1000,
+        save_best_every: int = 10,
+        show_progress_bars: bool = False,
+        force_update: bool = False,
+    ) -> Tensor:
+        self.potential_fn.set_x(self.default_x)
+        return super().map(
+            x,
+            num_iter,
+            num_to_optimize,
+            learning_rate,
+            init_method,
+            num_init_samples,
+            save_best_every,
+            show_progress_bars,
+            force_update,
+        )
+
     def _calculate_map(
         self,
         num_iter: int = 1_000,
@@ -337,48 +405,6 @@ class NeuralPotentialPosterior(NeuralPosterior):
             save_best_every=save_best_every,
             show_progress_bars=show_progress_bars,
         )[0]
-
-    def map(
-        self,
-        x: Optional[Tensor] = None,
-        num_iter: int = 1_000,
-        num_to_optimize: int = 100,
-        learning_rate: float = 0.01,
-        init_method: Union[str, Tensor] = "posterior",
-        num_init_samples: int = 1_000,
-        save_best_every: int = 10,
-        show_progress_bars: bool = False,
-        force_update: bool = False,
-    ) -> Tensor:
-        """Returns stored maximum-a-posterior estimate (MAP), otherwise calculates it.
-
-        See child classes for docstring.
-        """
-
-        if x is not None:
-            raise ValueError(
-                "Passing `x` directly to `.map()` has been deprecated."
-                "Use `.self_default_x()` to set `x`, and then run `.map()` "
-            )
-
-        if self.default_x is None:
-            raise ValueError(
-                "Default `x` has not been set."
-                "To set the default, use the `.set_default_x()` method."
-            )
-
-        if self._map is None or force_update:
-            self.potential_fn.set_x(self.default_x)
-            self._map = self._calculate_map(
-                num_iter=num_iter,
-                num_to_optimize=num_to_optimize,
-                learning_rate=learning_rate,
-                init_method=init_method,
-                num_init_samples=num_init_samples,
-                save_best_every=save_best_every,
-                show_progress_bars=show_progress_bars,
-            )
-        return self._map
 
     def __repr__(self):
         desc = f"""{self.__class__.__name__} sampler for potential_fn=<{

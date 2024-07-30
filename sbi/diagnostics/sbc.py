@@ -94,7 +94,9 @@ def run_sbc(
                 delayed(sbc_on_batch)(
                     thetas_batch, xs_batch, posterior, num_posterior_samples
                 )
-                for thetas_batch, xs_batch in zip(thetas_batches, xs_batches)
+                for thetas_batch, xs_batch in zip(
+                    thetas_batches, xs_batches, strict=False
+                )
             )
     else:
         pbar = tqdm(
@@ -105,7 +107,7 @@ def run_sbc(
 
         with pbar:
             sbc_outputs = []
-            for thetas_batch, xs_batch in zip(thetas_batches, xs_batches):
+            for thetas_batch, xs_batch in zip(thetas_batches, xs_batches, strict=False):
                 sbc_outputs.append(
                     sbc_on_batch(
                         thetas_batch,
@@ -225,7 +227,7 @@ def get_nltp(thetas: Tensor, xs: Tensor, posterior: NeuralPosterior) -> Tensor:
     nltp = torch.zeros(thetas.shape[0])
     unnormalized_log_prob = not isinstance(posterior, DirectPosterior)
 
-    for idx, (tho, xo) in enumerate(zip(thetas, xs)):
+    for idx, (tho, xo) in enumerate(zip(thetas, xs, strict=False)):
         # Log prob of true params under posterior.
         if unnormalized_log_prob:
             nltp[idx] = -posterior.potential(tho, x=xo)
@@ -303,7 +305,7 @@ def check_prior_vs_dap(prior_samples: Tensor, dap_samples: Tensor) -> Tensor:
 
     return torch.tensor([
         c2st(s1.unsqueeze(1), s2.unsqueeze(1))
-        for s1, s2 in zip(prior_samples.T, dap_samples.T)
+        for s1, s2 in zip(prior_samples.T, dap_samples.T, strict=False)
     ])
 
 

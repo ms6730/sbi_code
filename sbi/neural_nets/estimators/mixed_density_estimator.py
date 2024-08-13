@@ -10,7 +10,6 @@ from sbi.neural_nets.estimators.base import ConditionalDensityEstimator
 from sbi.neural_nets.estimators.categorical_net import CategoricalMassEstimator
 
 
-
 class MixedDensityEstimator(ConditionalDensityEstimator):
     """Class performing Mixed Neural Likelihood Estimation.
 

@@ -250,11 +250,11 @@ class ScorePosterior(NeuralPosterior):
 
     def map(
         self,
-        x: Tensor | None = None,
+        x: Optional[Tensor] = None,
         num_iter: int = 1000,
         num_to_optimize: int = 100,
         learning_rate: float = 1e54,
-        init_method: str | Tensor = "posterior",
+        init_method: Union[str, Tensor] = "posterior",
         num_init_samples: int = 1000,
         save_best_every: int = 10,
         show_progress_bars: bool = False,
@@ -312,7 +312,7 @@ class ScorePosterior(NeuralPosterior):
         num_iter: int = 1000,
         num_to_optimize: int = 100,
         learning_rate: float = 1e-5,
-        init_method: str | Tensor = "posterior",
+        init_method: Union[str, Tensor] = "posterior",
         num_init_samples: int = 1000,
         save_best_every: int = 10,
         show_progress_bars: bool = False,

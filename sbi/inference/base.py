@@ -47,7 +47,7 @@ def infer(
     init_kwargs: Optional[Dict] = None,
     train_kwargs: Optional[Dict] = None,
     build_posterior_kwargs: Optional[Dict] = None,
-) -> NeuralPotentialPosterior:
+) -> NeuralPosterior:
     r"""Runs simulation-based inference and returns the posterior.
 
     This function provides a simple interface to run sbi. Inference is run for a single
@@ -674,7 +674,7 @@ def check_if_proposal_has_default_x(proposal: Any):
     If the proposal is a `NeuralPosterior`, we check if the default_x is set and
     if it matches the `_x_o_training_focused_on`.
     """
-    if isinstance(proposal, NeuralPotentialPosterior) and proposal.default_x is None:
+    if isinstance(proposal, NeuralPosterior) and proposal.default_x is None:
         raise ValueError(
             "`proposal.default_x` is None, i.e. there is no "
             "x_o for training. Set it with "

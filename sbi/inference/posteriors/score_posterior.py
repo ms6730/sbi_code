@@ -10,7 +10,8 @@ from zuko.transforms import FreeFormJacobianTransform
 
 from sbi.inference.posteriors.base_posterior import NeuralPosterior
 from sbi.inference.potentials.score_based_potential import (
-    score_estimator_based_potential_gradient,
+    score_estimator_based_potential,
+    PosteriorScoreBasedPotential
 )
 from sbi.neural_nets.estimators.score_estimator import ConditionalScoreEstimator
 from sbi.neural_nets.estimators.shape_handling import (
@@ -22,7 +23,6 @@ from sbi.samplers.score.predictors import Predictor
 from sbi.samplers.score.score import Diffuser
 from sbi.sbi_types import Shape
 from sbi.utils import check_prior
-from sbi.utils.sbiutils import within_support
 from sbi.utils.torchutils import ensure_theta_batched
 
 
@@ -46,7 +46,7 @@ class ScorePosterior(NeuralPosterior):
         max_sampling_batch_size: int = 10_000,
         device: Optional[str] = None,
         x_shape: Optional[torch.Size] = None,
-        enable_transform: bool = False,  # NOTE: True not supported yet
+        enable_transform: bool = False,
     ):
         """
         Args:
@@ -60,31 +60,25 @@ class ScorePosterior(NeuralPosterior):
                 the shape of the observed data and give a descriptive error.
             enable_transform: Whether to transform parameters to unconstrained space
                 during MAP optimization. When False, an identity transform will be
-                returned for `theta_transform`.
+                returned for `theta_transform`. True is not supported yet.
         """
 
         check_prior(prior)
-
+        potential_fn, theta_transform = score_estimator_based_potential(
+            score_estimator,
+            prior,
+            x_o=None,
+            enable_transform=enable_transform,
+        )
         super().__init__(
+            potential_fn=potential_fn,
+            theta_transform=theta_transform,
             device=device,
             x_shape=x_shape,
         )
 
-        potential_fn_gradient, theta_transform = (
-            score_estimator_based_potential_gradient(
-                score_estimator=score_estimator,
-                prior=prior,
-                x_o=None,
-                enable_transform=enable_transform,
-            )
-        )
-
-        device = device if device is not None else potential_fn_gradient.device
-
         self.prior = prior
         self.score_estimator = score_estimator
-        self.potential_fn_gradient = potential_fn_gradient
-        self.theta_transform = theta_transform
 
         self.max_sampling_batch_size = max_sampling_batch_size
 
@@ -190,50 +184,12 @@ class ScorePosterior(NeuralPosterior):
             `(len(θ),)`-shaped log posterior probability $\log p(\theta|x)$ for θ in the
             support of the prior, -∞ (corresponding to 0 probability) outside.
         """
-
-        x = self._x_else_default_x(x)
+        self.potential_fn.set_x(self._x_else_default_x(x))
 
         theta = ensure_theta_batched(torch.as_tensor(theta))
-        theta_density_estimator = reshape_to_sample_batch_event(
-            theta, theta.shape[1:], leading_is_sample=True
+        return self.potential_fn(
+            theta.to(self._device), track_gradients=track_gradients, atol=atol, rtol=rtol, exact=exact
         )
-        x_density_estimator = reshape_to_batch_event(
-            x, event_shape=self.score_estimator.condition_shape
-        )
-        assert (
-            x_density_estimator.shape[0] == 1
-        ), ".log_prob() supports only `batchsize == 1`."
-
-        self.score_estimator.eval()
-
-        # Compute the base density
-        mean_T = self.score_estimator.mean_T
-        std_T = self.score_estimator.std_T
-        base_density = torch.distributions.Normal(mean_T, std_T)
-        for _ in range(len(self.score_estimator.input_shape)):
-            base_density = torch.distributions.Independent(base_density, 1)
-        # Build the freeform jacobian transformation by probability flow ODEs
-        transform = self.build_freeform_jacobian_transform(
-            x_density_estimator, atol=atol, rtol=rtol, exact=exact
-        )
-
-        with torch.set_grad_enabled(track_gradients):
-            eps_samples, logabsdet = transform.inv.call_and_ladj(  # type: ignore
-                theta_density_estimator
-            )
-            base_log_prob = base_density.log_prob(eps_samples)
-            log_probs = base_log_prob - logabsdet
-            log_probs = log_probs.squeeze(-1)
-
-            # Force probability to be zero outside prior support.
-            in_prior_support = within_support(self.prior, theta)
-
-            masked_log_prob = torch.where(
-                in_prior_support,
-                log_probs,
-                torch.tensor(float("-inf"), dtype=torch.float32, device=self._device),
-            )
-            return masked_log_prob
 
     def sample_batched(
         self,
@@ -365,27 +321,3 @@ class ScorePosterior(NeuralPosterior):
             best_theta = xs[best_idx]
             return best_theta
 
-    def build_freeform_jacobian_transform(
-        self, x_o: Tensor, atol: float = 1e-5, rtol: float = 1e-6, exact: bool = True
-    ):
-        # Create a freeform jacobian transformation
-        phi = self.score_estimator.parameters()
-
-        def f(t, x):
-            score = self.score_estimator(input=x, condition=x_o, time=t)
-            f = self.score_estimator.drift_fn(x, t)
-            g = self.score_estimator.diffusion_fn(x, t)
-            v = f - 0.5 * g**2 * score
-            return v
-
-        transform = FreeFormJacobianTransform(
-            f=f,
-            t0=self.score_estimator.T_min,
-            t1=self.score_estimator.T_max,
-            phi=phi,
-            atol=atol,
-            rtol=rtol,
-            exact=exact,
-        )
-
-        return transform

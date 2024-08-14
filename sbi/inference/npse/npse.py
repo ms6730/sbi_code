@@ -33,7 +33,7 @@ from sbi.utils import (
 from sbi.utils.sbiutils import ImproperEmpirical, mask_sims_from_prior
 
 
-class NSPE(NeuralInference):
+class NPSE(NeuralInference):
     def __init__(
         self,
         prior: Optional[Distribution] = None,
@@ -105,7 +105,7 @@ class NSPE(NeuralInference):
         proposal: Optional[DirectPosterior] = None,
         exclude_invalid_x: Optional[bool] = None,
         data_device: Optional[str] = None,
-    ) -> "NSPE":
+    ) -> "NPSE":
         r"""Store parameters and simulation outputs to use them for later training.
 
         Data are stored as entries in lists for each type of variable (parameter/data).

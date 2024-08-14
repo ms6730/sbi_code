@@ -54,7 +54,7 @@ class ScoreFunction(BasePotentialGradient):
         prior: Optional[Distribution],
         x_o: Optional[Tensor],
         interpret_as_iid: bool = False,
-        iid_method: str = "geffner",
+        iid_method: str = "iid_bridge",
         device: str = "cpu",
     ):
         r"""Returns the score function for score-based methods.
@@ -64,6 +64,8 @@ class ScoreFunction(BasePotentialGradient):
             prior: The prior distribution.
             x_o: The observed data at which to evaluate the posterior.
             x_o_shape: The shape of the observed data.
+            iid_method: Which method to use for computing the score. Currently, only
+                `iid_bridge` as proposed in Geffner et al. is implemented.
             device: The device on which to evaluate the potential.
         """
 
@@ -107,7 +109,7 @@ class ScoreFunction(BasePotentialGradient):
                         "Prior must be provided when interpreting the data as IID."
                     )
 
-                if self.iid_method == "geffner":
+                if self.iid_method == "iid_bridge":
                     score = _iid_bridge(
                         theta=theta,
                         xos=self.x_o,

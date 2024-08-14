@@ -22,7 +22,6 @@ from torch.distributions import (
     biject_to,
     constraints,
 )
-from torch.optim.adam import Adam
 
 from sbi.sbi_types import TorchTransform
 from sbi.utils.torchutils import atleast_2d
@@ -926,12 +925,12 @@ def gradient_ascent(
         best_log_prob_iter = torch.max(init_probs)
         best_theta_iter = sorted_inits[-1]
         best_theta_overall = best_theta_iter.detach().clone()
-        best_log_prob_overall = best_log_prob_iter.detach().clone()
     else:
         optimize_inits = inits
-        best_log_prob_overall = -2**31
+        best_log_prob_iter = torch.tensor(-(2**31))
         best_theta_overall = None
 
+    best_log_prob_overall = best_log_prob_iter.detach().clone()
     argmax_ = best_theta_overall
     max_val = best_log_prob_overall
 
@@ -941,7 +940,7 @@ def gradient_ascent(
     # back on the last saved `.map_`. We want to avoid a long error-message here.
     try:
         while iter_ < num_iter:
-            # Gradient of the potential, either `gradient` function (e.g. for 
+            # Gradient of the potential, either `gradient` function (e.g. for
             # score-based estimators) or via autodiff (e.g. for flows).
             try:
                 optimize_inits.requires_grad_(False)  # type: ignore
@@ -952,6 +951,7 @@ def gradient_ascent(
                 loss = probs.sum()
                 loss.backward()
                 gradient = optimize_inits.grad
+                assert gradient is Tensor, "Gradient must be a tensor."
 
             # Update the parameters with gradient descent.
             # See https://discuss.pytorch.org/t/updatation-of-parameters-without-using-optimizer-step/34244/2

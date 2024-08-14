@@ -19,7 +19,7 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from torch.utils.tensorboard.writer import SummaryWriter
 from tqdm.auto import tqdm
 
-from sbi.inference.posteriors.base_posterior import NeuralPotentialPosterior
+from sbi.inference.posteriors.base_posterior import NeuralPosterior
 from sbi.utils import (
     check_prior,
     get_log_root,
@@ -306,7 +306,7 @@ class NeuralInference(ABC):
         discard_prior_samples: bool = False,
         retrain_from_scratch: bool = False,
         show_train_summary: bool = False,
-    ) -> NeuralPotentialPosterior:
+    ) -> NeuralPosterior:
         raise NotImplementedError
 
     def get_dataloaders(

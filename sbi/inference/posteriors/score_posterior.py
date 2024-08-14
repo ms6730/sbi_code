@@ -258,27 +258,14 @@ class ScorePosterior(NeuralPosterior):
         Returns:
             The MAP estimate.
         """
-        if x is not None:
-            raise ValueError(
-                "Passing `x` directly to `.map()` has been deprecated."
-                "Use `.self_default_x()` to set `x`, and then run `.map()` "
-            )
-
-        if self.default_x is None:
-            raise ValueError(
-                "Default `x` has not been set."
-                "To set the default, use the `.set_default_x()` method."
-            )
-
-        if self._map is None or force_update:
-            self.potential_fn.set_x(self.default_x)
-            self._map = self._calculate_map(
-                num_iter=num_iter,
-                num_to_optimize=num_to_optimize,
-                learning_rate=learning_rate,
-                init_method=init_method,
-                num_init_samples=num_init_samples,
-                save_best_every=save_best_every,
-                show_progress_bars=show_progress_bars,
-            )
-        return self._map
+        return super().map(
+            x=x,
+            num_iter=num_iter,
+            num_to_optimize=num_to_optimize,
+            learning_rate=learning_rate,
+            init_method=init_method,
+            num_init_samples=num_init_samples,
+            save_best_every=save_best_every,
+            show_progress_bars=show_progress_bars,
+            force_update=force_update,
+        )

@@ -53,7 +53,6 @@ class ScoreFunction(BasePotentialGradient):
         score_estimator: ConditionalScoreEstimator,
         prior: Optional[Distribution],
         x_o: Optional[Tensor],
-        interpret_as_iid: bool = False,
         iid_method: str = "iid_bridge",
         device: str = "cpu",
     ):
@@ -72,7 +71,6 @@ class ScoreFunction(BasePotentialGradient):
         super().__init__(prior, x_o, device=device)
         self.score_estimator = score_estimator
         self.score_estimator.eval()
-        self.interpret_as_iid = interpret_as_iid  # TODO: Replace with what Guy did
         self.iid_method = iid_method
 
     def allow_iid_x(self) -> bool:
@@ -99,7 +97,7 @@ class ScoreFunction(BasePotentialGradient):
             )
 
         with torch.set_grad_enabled(track_gradients):
-            if not self.interpret_as_iid:
+            if not self.x_is_iid or self._x_o.shape[0] == 1:
                 score = self.score_estimator.forward(
                     input=theta, condition=self.x_o, time=time
                 )

@@ -22,8 +22,8 @@ from .test_utils import check_c2st
     "num_dim, prior_str",
     ((2, "gaussian"), (2, "uniform"), (1, "gaussian")),
 )
-def test_c2st_snpe_on_linearGaussian(sde_type, num_dim: int, prior_str: str):
-    """Test whether SNPE infers well a simple example with available ground truth."""
+def test_c2st_npse_on_linearGaussian(sde_type, num_dim: int, prior_str: str):
+    """Test whether NPSE infers well a simple example with available ground truth."""
 
     x_o = zeros(1, num_dim)
     num_samples = 1000

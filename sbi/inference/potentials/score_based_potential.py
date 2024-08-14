@@ -18,7 +18,7 @@ def score_estimator_based_potential_gradient(
     prior: Optional[Distribution],
     x_o: Optional[Tensor],
     enable_transform: bool = False,
-) -> Tuple["ScoreFunction", TorchTransform]:
+) -> Tuple["PosteriorScoreBasedPotentialGradient", TorchTransform]:
     r"""Returns the potential function gradient for score estimators.
 
     Args:
@@ -30,7 +30,9 @@ def score_estimator_based_potential_gradient(
     """
     device = str(next(score_estimator.parameters()).device)
 
-    potential_fn = ScoreFunction(score_estimator, prior, x_o, device=device)
+    potential_fn = PosteriorScoreBasedPotentialGradient(
+        score_estimator, prior, x_o, device=device
+    )
 
     # TODO Add issue
     assert (
@@ -47,7 +49,7 @@ def score_estimator_based_potential_gradient(
     return potential_fn, theta_transform
 
 
-class ScoreFunction(BasePotentialGradient):
+class PosteriorScoreBasedPotentialGradient(BasePotentialGradient):
     def __init__(
         self,
         score_estimator: ConditionalScoreEstimator,
@@ -72,10 +74,6 @@ class ScoreFunction(BasePotentialGradient):
         self.score_estimator = score_estimator
         self.score_estimator.eval()
         self.iid_method = iid_method
-
-    def allow_iid_x(self) -> bool:
-        # TODO: Implement multiple iid observations when potential is changed by Guy
-        return True
 
     def __call__(
         self, theta: Tensor, time: Tensor, track_gradients: bool = True

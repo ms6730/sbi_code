@@ -17,7 +17,7 @@ class EulerMaruyama(Kernel):
         self.eta = eta
 
     @abstractmethod
-    def __call__(self, state: State, time: Tensor) -> Tensor:
+    def __call__(self, state: State, time: Tensor) -> State:
         time_old = state.time
         input_old = state.input
         delta_t = time - time_old

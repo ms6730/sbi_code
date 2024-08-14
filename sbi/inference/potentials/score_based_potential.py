@@ -1,7 +1,7 @@
 # This file is part of sbi, a toolkit for simulation-based inference. sbi is licensed
 # under the Affero General Public License v3, see <https://www.gnu.org/licenses/>.
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import Tensor
@@ -133,18 +133,23 @@ class PosteriorScoreBasedPotential(BasePotential):
             return masked_log_prob
 
     def gradient(
-        self, theta: Tensor, time: Tensor, track_gradients: bool = True
+        self, theta: Tensor, time: Optional[Tensor] = None, track_gradients: bool = True
     ) -> Tensor:
         r"""Returns the potential function gradient for score-based methods.
 
         Args:
             theta: The parameters at which to evaluate the potential.
-            diffusion_time: The diffusion time.
+            diffusion_time: The diffusion time. If None, then `T_min` of the
+                self.score_estimator is used (i.e. we evaluate the gradient of the
+                actual data distribution).
             track_gradients: Whether to track gradients.
 
         Returns:
             The potential function.
         """
+        if time is None:
+            time=torch.tensor([self.score_estimator.T_min])
+
         if self._x_o is None:
             raise ValueError(
                 "No observed data x_o is available. Please reinitialize \

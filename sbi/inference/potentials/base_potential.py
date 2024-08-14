@@ -35,8 +35,7 @@ class BasePotential(metaclass=ABCMeta):
     def __call__(self, theta: Tensor, track_gradients: bool = True) -> Tensor:
         raise NotImplementedError
     
-    @abstractmethod
-    def gradient(self, theta: Tensor, track_gradients: bool = True) -> Tensor:
+    def gradient(self, theta: Tensor, time: Optional[Tensor] = None, track_gradients: bool = True) -> Tensor:
         raise NotImplementedError
 
     @property

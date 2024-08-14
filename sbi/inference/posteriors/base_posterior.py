@@ -53,7 +53,7 @@ class NeuralPosterior:
             )
 
         if not isinstance(potential_fn, BasePotential) and not isinstance(
-            potential_fn, BasePotentialGradient
+            potential_fn, BasePotential
         ):
             kwargs_of_callable = list(inspect.signature(potential_fn).parameters.keys())
             for key in ["theta", "x_o"]:
@@ -190,10 +190,51 @@ class NeuralPosterior:
         learning_rate: float = 0.01,
         init_method: Union[str, Tensor] = "posterior",
         num_init_samples: int = 1000,
-        save_best_every: int = 10,
+        save_best_every: int = 1000,
         show_progress_bars: bool = False,
         force_update: bool = False,
     ) -> Tensor:
+        r"""Returns the maximum-a-posteriori estimate (MAP).
+        
+        The MAP is obtained by running gradient
+        ascent from a given number of starting positions (samples from the posterior
+        with the highest log-probability). After the optimization is done, we select the
+        parameter set that has the highest log-probability after the optimization.
+
+        Warning: The default values used by this function are not well-tested. They
+        might require hand-tuning for the problem at hand.
+
+        For developers: if the prior is a `BoxUniform`, we carry out the optimization
+        in unbounded space and transform the result back into bounded space.
+
+        Args:
+            x: Deprecated - use `.set_default_x()` prior to `.map()`.
+            num_iter: Number of optimization steps that the algorithm takes
+                to find the MAP.
+            learning_rate: Learning rate of the optimizer.
+            init_method: How to select the starting parameters for the optimization. If
+                it is a string, it can be either [`posterior`, `prior`], which samples
+                the respective distribution `num_init_samples` times. If it is a
+                tensor, the tensor will be used as init locations.
+            num_init_samples: Draw this number of samples from the posterior and
+                evaluate the log-probability of all of them.
+            num_to_optimize: From the drawn `num_init_samples`, use the
+                `num_to_optimize` with highest log-probability as the initial points
+                for the optimization.
+            save_best_every: The best log-probability is computed, saved in the
+                `map`-attribute, and printed every `save_best_every`-th iteration.
+                Computing the best log-probability creates a significant overhead
+                for score-based estimators (thus, the default is `1000`.)
+            show_progress_bars: Whether to show a progressbar during sampling from
+                the posterior.
+            force_update: Whether to re-calculate the MAP when x is unchanged and
+                have a cached value.
+            log_prob_kwargs: Will be empty for SNLE and SNRE. Will contain
+                {'norm_posterior': True} for SNPE.
+
+        Returns:
+            The MAP estimate.
+        """
         if x is not None:
             raise ValueError(
                 "Passing `x` directly to `.map()` has been deprecated."
@@ -245,7 +286,6 @@ class NeuralPosterior:
         return gradient_ascent(
             potential_fn=self.potential_fn,
             inits=inits,
-            theta_transform=self.theta_transform,
             num_iter=num_iter,
             num_to_optimize=num_to_optimize,
             learning_rate=learning_rate,

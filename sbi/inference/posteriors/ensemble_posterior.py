@@ -243,7 +243,7 @@ class EnsemblePosterior(NeuralPosterior):
         else:
             return torch.logsumexp(log_weights.expand_as(log_probs) + log_probs, dim=0)
 
-    def set_default_x(self, x: Tensor) -> "NeuralPotentialPosterior":
+    def set_default_x(self, x: Tensor) -> "NeuralPosterior":
         r"""Set new default x for `.sample(), .log_prob()` as conditioning context.
 
         This is a pure convenience to avoid having to repeatedly specify `x` in calls to
@@ -377,7 +377,6 @@ class EnsemblePosterior(NeuralPosterior):
             return gradient_ascent(
                 potential_fn=self.potential_fn,
                 inits=inits,
-                theta_transform=self.theta_transform,
                 num_iter=num_iter,
                 num_to_optimize=num_to_optimize,
                 learning_rate=learning_rate,

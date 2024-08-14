@@ -1,5 +1,6 @@
 # This file is part of sbi, a toolkit for simulation-based inference. sbi is licensed
 # under the Affero General Public License v3, see <https://www.gnu.org/licenses/>.
+
 from functools import partial
 from typing import Dict, Optional, Union
 
@@ -157,7 +158,7 @@ class ScorePosterior(NeuralPosterior):
 
         return samples.reshape(sample_shape + self.score_estimator.input_shape)
 
-    def log_prob(
+    def log_prob( 
         self,
         theta: Tensor,
         x: Optional[Tensor] = None,
@@ -201,122 +202,83 @@ class ScorePosterior(NeuralPosterior):
             "Batched sampling is not implemented for ScorePosterior."
         )
 
+
     def map(
         self,
         x: Optional[Tensor] = None,
         num_iter: int = 1000,
-        num_to_optimize: int = 100,
-        learning_rate: float = 1e54,
+        num_to_optimize: int = 1000,
+        learning_rate: float = 1e-5,
         init_method: Union[str, Tensor] = "posterior",
         num_init_samples: int = 1000,
-        save_best_every: int = 10,
+        save_best_every: int = 1000,
         show_progress_bars: bool = False,
         force_update: bool = False,
     ) -> Tensor:
         r"""Returns the maximum-a-posteriori estimate (MAP).
 
-        The MAP is obtained by running gradient
+        The method can be interrupted (Ctrl-C) when the user sees that the
+        log-probability converges. The best estimate will be saved in `self._map` and
+        can be accessed with `self.map()`. The MAP is obtained by running gradient
         ascent from a given number of starting positions (samples from the posterior
         with the highest log-probability). After the optimization is done, we select the
         parameter set that has the highest log-probability after the optimization.
 
-         Args:
-             x: Deprecated - use `.set_default_x()` prior to `.map()`.
-             num_iter: Number of optimization steps that the algorithm takes
-                 to find the MAP.
-             learning_rate: Learning rate of the optimizer.
-             init_method: How to select the starting parameters for the optimization. If
-                 it is a string, it can be either [`posterior`, `prior`], which samples
-                 the respective distribution `num_init_samples` times. If it is a
-                 tensor, the tensor will be used as init locations.
-             num_init_samples: Draw this number of samples from the posterior and
-                 evaluate the log-probability of all of them.
-             num_to_optimize: From the drawn `num_init_samples`, use the
-                 `num_to_optimize` with highest log-probability as the initial points
-                 for the optimization.
-             save_best_every: The best log-probability is computed, saved in the
-                 `map`-attribute, and printed every `save_best_every`-th iteration.
-                 Computing the best log-probability creates a significant overhead
-                 (thus, the default is `10`.)
-             show_progress_bars: Whether to show a progressbar during sampling from the
-                 posterior.
-             force_update: Whether to re-calculate the MAP when x is unchanged and
-                 have a cached value.
-             log_prob_kwargs: Will be empty for SNLE and SNRE. Will contain
-                 {'norm_posterior': True} for SNPE.
+        Warning: The default values used by this function are not well-tested. They
+        might require hand-tuning for the problem at hand.
 
-         Returns:
-             The MAP estimate.
-        """
-        return super().map(
-            x,
-            num_iter,
-            num_to_optimize,
-            learning_rate,
-            init_method,
-            num_init_samples,
-            save_best_every,
-            show_progress_bars,
-            force_update,
-        )
-
-    def _calculate_map(
-        self,
-        num_iter: int = 1000,
-        num_to_optimize: int = 100,
-        learning_rate: float = 1e-5,
-        init_method: Union[str, Tensor] = "posterior",
-        num_init_samples: int = 1000,
-        save_best_every: int = 10,
-        show_progress_bars: bool = False,
-    ) -> Tensor:
-        """Calculate the maximum a posteriori (MAP) estimate of the posterior.
-
-        Uses gradient ascent to find the MAP estimate of the posterior. The gradient is
-        calculated using the score estimator.
+        For developers: if the prior is a `BoxUniform`, we carry out the optimization
+        in unbounded space and transform the result back into bounded space.
 
         Args:
-            num_iter: Number of interations. Defaults to 1000.
-            num_to_optimize : Note used (API), just for interface. Defaults to 100.
-            learning_rate: Learning rate. Defaults to 1e-5.
-            init_method: Initialization of particles. Defaults to "posterior".
-            num_init_samples: Not used (API). Defaults to 1000.
-            save_best_evey: Not used (API). Defaults to 10.
-            show_progress_bars (bool, optional): _description_. Defaults to False.
-
-        Raises:
-            ValueError: Invalid init method
+            x: Deprecated - use `.set_default_x()` prior to `.map()`.
+            num_iter: Number of optimization steps that the algorithm takes
+                to find the MAP.
+            learning_rate: Learning rate of the optimizer.
+            init_method: How to select the starting parameters for the optimization. If
+                it is a string, it can be either [`posterior`, `prior`], which samples
+                the respective distribution `num_init_samples` times. If it is a
+                tensor, the tensor will be used as init locations.
+            num_init_samples: Draw this number of samples from the posterior and
+                evaluate the log-probability of all of them.
+            num_to_optimize: From the drawn `num_init_samples`, use the
+                `num_to_optimize` with highest log-probability as the initial points
+                for the optimization.
+            save_best_every: The best log-probability is computed, saved in the
+                `map`-attribute, and printed every `save_best_every`-th iteration.
+                Computing the best log-probability creates a significant overhead
+                (thus, the default is `10`.)
+            show_progress_bars: Whether to show a progressbar during sampling from
+                the posterior.
+            force_update: Whether to re-calculate the MAP when x is unchanged and
+                have a cached value.
+            log_prob_kwargs: Will be empty for SNLE and SNRE. Will contain
+                {'norm_posterior': True} for SNPE.
 
         Returns:
-            Tensor: MAP
+            The MAP estimate.
         """
-
-        with torch.no_grad():
-            if init_method == "posterior":
-                inits = self.sample(
-                    (num_init_samples,), show_progress_bars=show_progress_bars
-                )
-            elif init_method == "proposal":
-                inits = self.proposal.sample((num_init_samples,))  # type: ignore
-            elif isinstance(init_method, Tensor):
-                inits = init_method
-            else:
-                raise ValueError
-
-            self.potential_fn_gradient.set_x(self.default_x)
-            gradient_fn = partial(
-                self.potential_fn_gradient,
-                time=torch.tensor([self.score_estimator.T_min]),
+        if x is not None:
+            raise ValueError(
+                "Passing `x` directly to `.map()` has been deprecated."
+                "Use `.self_default_x()` to set `x`, and then run `.map()` "
             )
 
-            # Run MAP optimization
-            xs = inits.clone()
-            for _ in range(num_iter):
-                gradient = gradient_fn(xs)
-                xs = xs + learning_rate * gradient
+        if self.default_x is None:
+            raise ValueError(
+                "Default `x` has not been set."
+                "To set the default, use the `.set_default_x()` method."
+            )
 
-            log_prob = self.log_prob(xs)
-            best_idx = torch.argmax(log_prob)
-            best_theta = xs[best_idx]
-            return best_theta
-
+        if self._map is None or force_update:
+            self.potential_fn.set_x(self.default_x)
+            self._map = self._calculate_map(
+                num_iter=num_iter,
+                num_to_optimize=num_to_optimize,
+                learning_rate=learning_rate,
+                init_method=init_method,
+                num_init_samples=num_init_samples,
+                save_best_every=save_best_every,
+                show_progress_bars=show_progress_bars,
+            )
+        return self._map

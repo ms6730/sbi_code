@@ -6,7 +6,6 @@ from typing import Dict, Optional, Union
 import torch
 from torch import Tensor
 from torch.distributions import Distribution
-from zuko.transforms import FreeFormJacobianTransform
 
 from sbi.inference.posteriors.base_posterior import NeuralPosterior
 from sbi.inference.potentials.score_based_potential import (
@@ -117,7 +116,7 @@ class ScorePosterior(NeuralPosterior):
 
         x = self._x_else_default_x(x)
         x = reshape_to_batch_event(x, self.score_estimator.condition_shape)
-        self.potential_fn_gradient.set_x(x)
+        self.potential_fn.set_x(x)
 
         max_sampling_batch_size = (
             self.max_sampling_batch_size
@@ -138,7 +137,7 @@ class ScorePosterior(NeuralPosterior):
             ts = torch.linspace(T_max, T_min, steps)
 
         diffuser = Diffuser(
-            self.potential_fn_gradient, predictor=predictor, corrector=corrector
+            self.potential_fn, predictor=predictor, corrector=corrector
         )
         max_sampling_batch_size = min(max_sampling_batch_size, num_samples)
         samples = []

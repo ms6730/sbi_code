@@ -17,6 +17,7 @@ from sbi.neural_nets.estimators.shape_handling import (
 )
 from sbi.utils.sbiutils import within_support
 from sbi.utils.torchutils import ensure_theta_batched
+from zuko.transforms import FreeFormJacobianTransform
 
 
 def score_estimator_based_potential(
@@ -32,7 +33,6 @@ def score_estimator_based_potential(
         prior: The prior distribution.
         x_o: The observed data at which to evaluate the score.
         enable_transform: Whether to enable transforms. Not supported yet.
-
     """
     device = str(next(score_estimator.parameters()).device)
 

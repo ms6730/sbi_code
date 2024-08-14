@@ -12,7 +12,6 @@ from torch import Tensor
 
 from sbi.inference.potentials.base_potential import (
     BasePotential,
-    BasePotentialGradient,
     CallablePotentialWrapper,
 )
 from sbi.sbi_types import Array, Shape, TorchTransform
@@ -195,18 +194,30 @@ class NeuralPosterior:
         show_progress_bars: bool = False,
         force_update: bool = False,
     ) -> Tensor:
-        self.potential_fn.set_x(self.default_x)
-        return super().map(
-            x,
-            num_iter,
-            num_to_optimize,
-            learning_rate,
-            init_method,
-            num_init_samples,
-            save_best_every,
-            show_progress_bars,
-            force_update,
-        )
+        if x is not None:
+            raise ValueError(
+                "Passing `x` directly to `.map()` has been deprecated."
+                "Use `.self_default_x()` to set `x`, and then run `.map()` "
+            )
+
+        if self.default_x is None:
+            raise ValueError(
+                "Default `x` has not been set."
+                "To set the default, use the `.set_default_x()` method."
+            )
+
+        if self._map is None or force_update:
+            self.potential_fn.set_x(self.default_x)
+            self._map = self._calculate_map(
+                num_iter=num_iter,
+                num_to_optimize=num_to_optimize,
+                learning_rate=learning_rate,
+                init_method=init_method,
+                num_init_samples=num_init_samples,
+                save_best_every=save_best_every,
+                show_progress_bars=show_progress_bars,
+            )
+        return self._map
 
     def _calculate_map(
         self,
@@ -222,7 +233,6 @@ class NeuralPosterior:
 
         See `map()` method of child classes for docstring.
         """
-
         if init_method == "posterior":
             inits = self.sample((num_init_samples,))
         elif init_method == "proposal":

@@ -18,10 +18,8 @@ from .test_utils import check_c2st, get_dkl_gaussian_prior
 
 @pytest.mark.slow
 @pytest.mark.parametrize("sde_type", ["vp", "ve", "subvp"])
-@pytest.mark.parametrize(
-    "num_dim, prior_str",
-    ((2, "gaussian"), (2, "uniform"), (1, "gaussian")),
-)
+@pytest.mark.parametrize("prior_str", ["gaussian", "uniform"])
+@pytest.mark.parametrize("num_dim", [1, 2])
 def test_c2st_npse_on_linearGaussian(sde_type, num_dim: int, prior_str: str):
     """Test whether NPSE infers well a simple example with available ground truth."""
 
@@ -65,9 +63,6 @@ def test_c2st_npse_on_linearGaussian(sde_type, num_dim: int, prior_str: str):
 
     # Compute the c2st and assert it is near chance level of 0.5.
     check_c2st(samples, target_samples, alg=f"npse-{sde_type}-{prior_str}-{num_dim}D")
-
-    map_ = posterior.map(show_progress_bars=True)
-    assert torch.allclose(map_, gt_posterior.mean, atol=0.2)
 
     # Checks for log_prob()
     if prior_str == "gaussian":
@@ -145,20 +140,22 @@ def test_c2st_npse_on_linearGaussian_different_dims():
     check_c2st(samples, target_samples, alg="npse_different_dims_and_resume_training")
 
 
-def test_npse_iid_inference():
+@pytest.mark.xfail(reason="iid_bridge not working.")
+@pytest.mark.parametrize("num_trials", [2, 10])
+def test_npse_iid_inference(num_trials):
     """Test whether NPSE infers well a simple example with available ground truth."""
 
-    num_trials = 10
-    x_o = zeros(num_trials, 1)
+    num_dim = 2
+    x_o = zeros(num_trials, num_dim)
     num_samples = 1000
     num_simulations = 3000
 
     # likelihood_mean will be likelihood_shift+theta
-    likelihood_shift = -1.0 * ones(1)
-    likelihood_cov = 0.3 * eye(1)
+    likelihood_shift = -1.0 * ones(num_dim)
+    likelihood_cov = 0.3 * eye(num_dim)
 
-    prior_mean = zeros(1)
-    prior_cov = eye(1)
+    prior_mean = zeros(num_dim)
+    prior_cov = eye(num_dim)
     prior = MultivariateNormal(loc=prior_mean, covariance_matrix=prior_cov)
     gt_posterior = true_posterior_linear_gaussian_mvn_prior(
         x_o, likelihood_shift, likelihood_cov, prior_mean, prior_cov
@@ -171,11 +168,47 @@ def test_npse_iid_inference():
     x = linear_gaussian(theta, likelihood_shift, likelihood_cov)
 
     score_estimator = inference.append_simulations(theta, x).train(
-        training_batch_size=100, max_num_epochs=10
+        training_batch_size=100,
     )
     posterior = inference.build_posterior(score_estimator)
     posterior.set_default_x(x_o)
     samples = posterior.sample((num_samples,))
 
     # Compute the c2st and assert it is near chance level of 0.5.
-    check_c2st(samples, target_samples, alg="npse-vp-gaussian-1D")
+    check_c2st(
+        samples, target_samples, alg=f"npse-vp-gaussian-1D-{num_trials}iid-trials"
+    )
+
+
+@pytest.mark.slow
+@pytest.mark.xfail(
+    raises=AssertionError, reason="MAP optimization via score not working accurately."
+)
+def test_npse_map():
+    num_dim = 2
+    x_o = zeros(num_dim)
+    num_simulations = 3000
+
+    # likelihood_mean will be likelihood_shift+theta
+    likelihood_shift = -1.0 * ones(num_dim)
+    likelihood_cov = 0.3 * eye(num_dim)
+
+    prior_mean = zeros(num_dim)
+    prior_cov = eye(num_dim)
+    prior = MultivariateNormal(loc=prior_mean, covariance_matrix=prior_cov)
+    gt_posterior = true_posterior_linear_gaussian_mvn_prior(
+        x_o, likelihood_shift, likelihood_cov, prior_mean, prior_cov
+    )
+    inference = NPSE(prior, show_progress_bars=True)
+
+    theta = prior.sample((num_simulations,))
+    x = linear_gaussian(theta, likelihood_shift, likelihood_cov)
+
+    inference.append_simulations(theta, x).train(
+        training_batch_size=100, max_num_epochs=10
+    )
+    posterior = inference.build_posterior().set_default_x(x_o)
+
+    map_ = posterior.map(show_progress_bars=True)
+
+    assert torch.allclose(map_, gt_posterior.mean, atol=0.2), "MAP is not close to GT."

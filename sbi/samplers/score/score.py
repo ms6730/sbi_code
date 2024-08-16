@@ -37,9 +37,7 @@ class Diffuser:
             corrector_params (optional): _description_. Defaults to None.
         """
         # Set predictor and corrector
-        self.set_predictor(
-            predictor, score_based_potential, **(predictor_params or {})
-        )
+        self.set_predictor(predictor, score_based_potential, **(predictor_params or {}))
         self.set_corrector(corrector, **(corrector_params or {}))
         self.device = self.predictor.device
 
@@ -53,9 +51,7 @@ class Diffuser:
 
         # Extract relevant shapes from the score function
         self.input_shape = score_based_potential.score_estimator.input_shape
-        self.condition_shape = (
-            score_based_potential.score_estimator.condition_shape
-        )
+        self.condition_shape = score_based_potential.score_estimator.condition_shape
         condition_dim = len(self.condition_shape)
         self.batch_shape = score_based_potential.x_o.shape[:-condition_dim]
 

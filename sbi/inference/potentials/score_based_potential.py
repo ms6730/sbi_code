@@ -88,8 +88,19 @@ class PosteriorScoreBasedPotential(BasePotential):
         atol: float = 1e-5,
         rtol: float = 1e-6,
         exact: bool = True,
-    ):
-        """Return the potential via probability flow ODE."""
+    ) -> Tensor:
+        """Return the potential (posterior log prob) via probability flow ODE.
+
+        Args:
+            theta: The parameters at which to evaluate the potential.
+            track_gradients: Whether to track gradients.
+            atol: Absolute tolerance for the ODE solver.
+            rtol: Relative tolerance for the ODE solver.
+            exact: Whether to use the exact ODE solver.
+
+        Returns:
+            The potential function, i.e., the log probability of the posterior.
+        """
         theta = ensure_theta_batched(torch.as_tensor(theta))
         theta_density_estimator = reshape_to_sample_batch_event(
             theta, theta.shape[1:], leading_is_sample=True
@@ -126,13 +137,13 @@ class PosteriorScoreBasedPotential(BasePotential):
 
         Args:
             theta: The parameters at which to evaluate the potential.
-            diffusion_time: The diffusion time. If None, then `T_min` of the
+            time: The diffusion time. If None, then `T_min` of the
                 self.score_estimator is used (i.e. we evaluate the gradient of the
                 actual data distribution).
             track_gradients: Whether to track gradients.
 
         Returns:
-            The potential function.
+            The gradient of the potential function.
         """
         if time is None:
             time = torch.tensor([self.score_estimator.T_min])
@@ -191,7 +202,7 @@ class PosteriorScoreBasedPotential(BasePotential):
             self.score_estimator, condition, atol=atol, rtol=rtol, exact=exact
         )
         # Use zuko to build the normalizing flow.
-        return NormalizingFlow(transform, base=self.score_estimator.base_density)
+        return NormalizingFlow(transform, base=base_density)
 
 
 def build_freeform_jacobian_transform(

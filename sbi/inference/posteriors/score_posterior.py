@@ -331,6 +331,9 @@ class ScorePosterior(NeuralPosterior):
         Returns:
             The MAP estimate.
         """
+        raise NotImplementedError(
+            "MAP estimation is currently not working accurately for ScorePosterior."
+        )
         return super().map(
             x=x,
             num_iter=num_iter,

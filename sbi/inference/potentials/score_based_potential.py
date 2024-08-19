@@ -160,6 +160,9 @@ class PosteriorScoreBasedPotential(BasePotential):
                     input=theta, condition=self.x_o, time=time
                 )
             else:
+                raise NotImplementedError(
+                    "Score accumulation for IID data is not yet fully implemented."
+                )
                 if self.prior is None:
                     raise ValueError(
                         "Prior must be provided when interpreting the data as IID."

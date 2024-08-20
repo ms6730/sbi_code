@@ -13,10 +13,7 @@ from torch.distributions import MultivariateNormal, Uniform
 from sbi.analysis import sbc_rank_plot
 from sbi.diagnostics import check_sbc, get_nltp, run_sbc
 from sbi.inference import NPSE, SNLE, SNPE
-from sbi.simulators import linear_gaussian
-from sbi.simulators.linear_gaussian import (
-    linear_gaussian,
-)
+from sbi.simulators.linear_gaussian import linear_gaussian
 from sbi.utils import BoxUniform, MultipleIndependent
 from tests.test_utils import PosteriorPotential, TractablePosterior
 

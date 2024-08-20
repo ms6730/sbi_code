@@ -206,7 +206,8 @@ def test_npse_iid_inference(num_trials):
 
 @pytest.mark.slow
 @pytest.mark.xfail(
-    raises=AssertionError, reason="MAP optimization via score not working accurately."
+    raises=NotImplementedError,
+    reason="MAP optimization via score not working accurately.",
 )
 def test_npse_map():
     num_dim = 2

@@ -2,7 +2,7 @@
 
 **Parameter inference** refers to the process of estimating the values of parameters in a statistical or mathematical model based on observed data. These parameters are typically unknown quantities that define the underlying behavior of the model. The goal of parameter inference is to draw conclusions about these parameters and assess how well they explain the observed data.
 
-### Key Concepts in Parameter Inference
+## Key Concepts in Parameter Inference
 
 1. **Model**:  
    A mathematical representation of the system being studied. It includes parameters that are to be inferred.  

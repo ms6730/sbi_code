@@ -20,7 +20,7 @@
    Assessing the confidence or uncertainty in the inferred parameters, often expressed as posterior distributions (in Bayesian methods).   
    In Bayesian inference, uncertainty is expressed through a **posterior distribution**, which represents the probability of different parameter values given the observed data and prior beliefs.  
 
-# Amortized Methods in Simulation-Based Inference (SBI)
+## Amortized Methods in Simulation-Based Inference (SBI)
 
 The idea behind **amortized methods** is to train a universal model (a posterior estimator) that can quickly predict the posterior distribution for different observations without needing retraining. Let’s break this down:
 
@@ -31,8 +31,8 @@ The idea behind **amortized methods** is to train a universal model (a posterior
 - The model learns a mapping from **observations** (data) to **posterior distributions**.
 
 **Example:**
-- Simulate data (\(x\)) using a known set of parameters (\(\theta\)) from your simulator.
-- The model is trained to predict \(P(\theta \mid x)\), the posterior distribution of the parameters given the data.
+- Simulate data $\(x\)$ using a known set of parameters $\(\theta\)$ from your simulator.
+- The model is trained to predict (P($\theta$ $\mid x$)\), the posterior distribution of the parameters given the data.
 
 ---
 

@@ -81,7 +81,7 @@ The idea behind **amortized methods** is to train a universal model (a posterior
 - Use your **simulator** to generate data \$(x\$) for different parameter values sampled from the prior.
 
 ### 3. Update the Posterior
-- Based on how well the simulated data matches the observed data $\(x_{\text{obs}}\$), update the posterior distribution (P($\theta$ $\mid x$)\).
+- Based on how well the simulated data matches the observed data $\(x_{\text{obs}}\$), update the posterior distribution P($\theta$ $\mid x$)\.
 - **Bayesian Updating:** The new posterior reflects which parameter values are more or less likely given the observed data.
 
 ### 4. Refine Parameter Search

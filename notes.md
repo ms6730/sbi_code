@@ -74,14 +74,14 @@ The idea behind **amortized methods** is to train a universal model (a posterior
 ## How It Happens: The Process
 
 ### 1. Start with a Prior
-- Begin with a **prior distribution** for the parameters (\(\theta\)), which represents your initial belief about the parameter values before observing any data.
+- Begin with a **prior distribution** for the parameters ($\theta\$), which represents your initial belief about the parameter values before observing any data.
 - **Example:** You might start with a uniform prior over a wide range of possible parameter values.
 
 ### 2. Simulate Data
 - Use your **simulator** to generate data \$(x\$) for different parameter values sampled from the prior.
 
 ### 3. Update the Posterior
-- Based on how well the simulated data matches the observed data ($\(x_{\text{obs}}\$)), update the posterior distribution \(P(\theta \mid x_{\text{obs}})\).
+- Based on how well the simulated data matches the observed data $\(x_{\text{obs}}\$), update the posterior distribution \(P(\theta \mid x_{\text{obs}})\).
 - **Bayesian Updating:** The new posterior reflects which parameter values are more or less likely given the observed data.
 
 ### 4. Refine Parameter Search

@@ -17,7 +17,7 @@
      - **Bayesian Inference**: Using prior distributions and updating beliefs based on observed data to estimate parameters.
 
 4. **Uncertainty Quantification**:  
-   Assessing the confidence or uncertainty in the inferred parameters, often expressed as posterior distributions (in Bayesian methods).
-   - In Bayesian inference, uncertainty is expressed through a **posterior distribution**, which represents the probability of different parameter values given the observed data and prior beliefs.  
-   - For example, the posterior distribution might show that the parameter is most likely around 10 but could plausibly range from 8 to 12, with lower probabilities for values outside this range.
+   Assessing the confidence or uncertainty in the inferred parameters, often expressed as posterior distributions (in Bayesian methods).   
+   In Bayesian inference, uncertainty is expressed through a **posterior distribution**, which represents the probability of different parameter values given the observed data and prior beliefs.  
+
 

@@ -6,7 +6,7 @@
 
 1. **Model**:  
    A mathematical representation of the system being studied. It includes parameters that are to be inferred.  
-   - **Example**: In a linear regression model \( y = $\beta_0$ + \beta_1 x + \epsilon \), \(\beta_0\) and \(\beta_1\) are parameters.
+   - **Example**: In a linear regression model \( y = $\beta_0$ + $\beta_1$ x + $\epsilon$ \), \(\beta_0\) and \(\beta_1\) are parameters.
 
 2. **Data**:  
    Observed measurements or outcomes used to estimate the parameters.

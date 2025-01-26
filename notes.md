@@ -38,7 +38,7 @@ The idea behind **amortized methods** is to train a universal model (a posterior
 
 #### 2. Reuse Across Observations
 - Once trained, the model can infer the posterior distribution for **new observations** without additional training.
-- The model generalizes across similar datasets because it has learned the relationship between data (\(x\)) and parameters (\(\theta\)).
+- The model generalizes across similar datasets because it has learned the relationship between data $\(x\)$ and parameters ($\theta\$).
 
 **Example:**
 - After training on a dataset of simulated plant heights based on sunlight and water, you can use the same model to infer parameters for other plant height datasets, provided they are generated under similar conditions.
@@ -64,7 +64,7 @@ The idea behind **amortized methods** is to train a universal model (a posterior
 
 #### Real-Life Analogy
 
-Imagine you’re learning to calculate the speed of a car (\(\theta\)) based on its travel time and distance (\(x\)):
+Imagine you’re learning to calculate the speed of a car (\(\theta\)) based on its travel time and distance ($x\$):
 
 #### Training Phase:
 - You practice calculating speed for a wide variety of distances and times. After enough practice, you don’t need to “retrain” yourself for every new case—you’ve generalized the formula \( \text{speed} = \text{distance} / \text{time} \).
@@ -79,28 +79,6 @@ Imagine you’re learning to calculate the speed of a car (\(\theta\)) based on 
 1. **Speed**: Once trained, the model can infer posteriors for new observations almost instantaneously.
 2. **Reusability**: The same model works for any observation within the same simulation context.
 3. **Scalability**: Perfect for large-scale problems where multiple datasets or observations need to be analyzed.
-
----
-
-#### Practical Example
-
-#### Simulator Context:
-- You have a simulator that models weather patterns based on:
-  - **Wind speed (\(\theta_1\))**
-  - **Temperature (\(\theta_2\))**
-
-#### Amortized Approach:
-1. Train the posterior estimator using simulations of weather data (\(x\)) across a range of possible wind speeds and temperatures (\(\theta_1, \theta_2\)).
-2. Once trained, the model can instantly infer \(P(\theta \mid x)\) for any new weather data \(x\), such as from different locations or time periods, **without retraining**.
-
----
-
-#### In Summary
-Amortized methods work because the posterior estimator generalizes the relationship between observations and parameters during training. This allows the same model to be reused efficiently for new observations, saving computational resources and time.
-
----
-
-Would you like to explore specific algorithms (e.g., neural density estimators) used for amortized methods?
 
 
 

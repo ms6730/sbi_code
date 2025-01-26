@@ -40,9 +40,6 @@ The idea behind **amortized methods** is to train a universal model (a posterior
 - Once trained, the model can infer the posterior distribution for **new observations** without additional training.
 - The model generalizes across similar datasets because it has learned the relationship between data $\(x\)$ and parameters ($\theta\$).
 
-**Example:**
-- After training on a dataset of simulated plant heights based on sunlight and water, you can use the same model to infer parameters for other plant height datasets, provided they are generated under similar conditions.
-
 ---
 
 #### 3. Efficiency Gains
@@ -51,26 +48,13 @@ The idea behind **amortized methods** is to train a universal model (a posterior
 
 ---
 
-## #Why This Works
+### Why This Works
 
 #### Generalization
 - The model learns **general patterns** from the training data that apply to a wide range of possible observations.
-- **Example:** If the posterior for plant growth parameters depends on water and sunlight, the model generalizes this dependency for any new observation within the same context.
 
 #### Neural Networks (or Other Flexible Models)
 - Neural networks are capable of approximating **complex mappings** from data to posteriors, allowing them to adapt to varying observations.
-
----
-
-#### Real-Life Analogy
-
-Imagine you’re learning to calculate the speed of a car (\(\theta\)) based on its travel time and distance ($x\$):
-
-#### Training Phase:
-- You practice calculating speed for a wide variety of distances and times. After enough practice, you don’t need to “retrain” yourself for every new case—you’ve generalized the formula \( \text{speed} = \text{distance} / \text{time} \).
-
-#### Inference Phase (Reuse):
-- When given a new distance and time, you instantly apply your knowledge to infer the speed without re-learning the formula.
 
 ---
 
